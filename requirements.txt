@@ -1,0 +1,30 @@
+# Descarga y descubrimiento de los partes de MITECO
+httpx>=0.27,<1.0
+beautifulsoup4>=4.12,<5.0
+
+# Extraccion y parseo de PDF
+# PyMuPDF sera el lector principal; pypdf mantiene compatible el prototipo actual.
+pymupdf>=1.24,<2.0
+pypdf>=5.0,<7.0
+pydantic>=2.7,<3.0
+
+# Normalizacion y resolucion aproximada de ubicaciones
+rapidfuzz>=3.9,<4.0
+
+# Embeddings locales y calculo vectorial
+# Versiones compatibles con macOS Intel x86_64. PyTorch dejo de publicar
+# wheels para esta plataforma despues de 2.2.2.
+numpy==1.26.4
+torch==2.2.2; platform_system == "Darwin" and platform_machine == "x86_64"
+torch>=2.4,<3.0; platform_system != "Darwin" or platform_machine != "x86_64"
+transformers==4.49.0
+sentence-transformers==3.4.1
+
+# Base de datos vectorial local
+chromadb>=1.0,<2.0
+
+# Generacion de respuestas mediante Ollama local u Ollama Cloud
+ollama>=0.4,<1.0
+
+# Pruebas del parser y del pipeline de recuperacion
+pytest>=8.0,<10.0

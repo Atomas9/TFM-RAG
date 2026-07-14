@@ -1,0 +1,54 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Entornos virtuales y Conda locales
+.venv/
+venv/
+env/
+.conda/
+
+# Editores y notebooks
+.vscode/
+.idea/
+.ipynb_checkpoints/
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Logs y archivos temporales
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Datos descargados, resultados e indices regenerables
+data/raw/**
+!data/raw/.gitkeep
+data/processed/**
+!data/processed/.gitkeep
+data/chroma/**
+!data/chroma/.gitkeep
+storage/
+models/
+
+# Artefactos de embeddings
+*.npy
+*.npz
+
