@@ -41,6 +41,10 @@ partes diarios de MITECO.
 - Se corrigieron las incompatibilidades de NumPy, PyTorch y Transformers en
   macOS Intel.
 - Se reorganizo el repositorio y se separo el material anterior en `extras`.
+- Se creo `src/miteco_rag/fase1_parseo_miteco.py` como esqueleto tipado de la
+  fase de parseo, sin implementar todavia el algoritmo.
+- Se reviso el papel de las clases Pydantic como modelos de datos validados y
+  se aclararon los conceptos de clase, instancia, atributo y serializacion.
 
 ### Decisiones
 
@@ -67,6 +71,19 @@ partes diarios de MITECO.
 
 ### Siguiente paso
 
-Implementar el modelo `FireSnapshot` y la extraccion de lineas conservando el
-numero de pagina.
+Retomar la fase 1 implementando y probando, en este orden:
 
+1. `clean_line()`.
+2. `normalize_for_match()`.
+3. `calculate_sha256()`.
+4. `extract_pdf_lines()` conservando el numero de pagina.
+
+No se avanzara a la maquina de estados hasta poder inspeccionar y validar la
+salida de estas cuatro funciones sobre un PDF real.
+
+### Cierre de la jornada
+
+La estructura del repositorio, el entorno `RAG-TFM` y el esqueleto de la fase 1
+quedan preparados y validados. La sesion se cierra sin implementar todavia el
+parser para continuar el 2026-07-15 desde las funciones basicas de
+normalizacion y lectura del PDF.
