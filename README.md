@@ -11,11 +11,17 @@ ubicacion o estado del incendio.
 ## Estado actual
 
 El repositorio contiene la estructura inicial del proyecto y el entorno de
-dependencias validado. El parser, la indexacion y el sistema de consulta se
-desarrollaran desde cero dentro de `src/miteco_rag`.
+dependencias validado. En `src/miteco_rag/parseo_y_chuncking.py` ya estan
+implementadas y comprobadas la lectura de PDF por paginas, la limpieza y
+normalizacion de lineas, el hash SHA-256 y la extraccion de metadatos del
+documento. La separacion de bloques por incendio es el siguiente paso.
 
 El material previo utilizado como referencia se conserva en `extras`, pero no
 forma parte del codigo principal.
+
+El corpus local de trabajo contiene actualmente cuatro partes, con 34 bloques
+`Localizacion:`: 33 de Espana y uno de Portugal. Los PDF y los resultados
+generados continuan fuera del control de versiones.
 
 ## Arquitectura prevista
 
@@ -37,6 +43,7 @@ La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTUR
 .
 ├── src/miteco_rag/             Codigo principal
 ├── tests/                      Pruebas automatizadas
+├── notebooks/                  Apuntes y soluciones ejecutables paso a paso
 ├── data/
 │   ├── raw/                    PDF originales, no versionados
 │   ├── processed/              Registros parseados, no versionados
@@ -83,3 +90,8 @@ reglas del corpus.
 Las decisiones y avances diarios se registran en
 [CUADERNO_DE_BITACORA.md](CUADERNO_DE_BITACORA.md).
 
+La solucion comentada de la primera fase puede estudiarse y ejecutarse desde
+[notebooks/01_fase1_parseo_miteco.ipynb](notebooks/01_fase1_parseo_miteco.ipynb).
+
+La ultima revision del codigo desarrollado esta en
+[docs/REVISION_FASE_1.md](docs/REVISION_FASE_1.md).
