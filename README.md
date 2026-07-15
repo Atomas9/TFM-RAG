@@ -95,3 +95,6 @@ La solucion comentada de la primera fase puede estudiarse y ejecutarse desde
 
 La ultima revision del codigo desarrollado esta en
 [docs/REVISION_FASE_1.md](docs/REVISION_FASE_1.md).
+
+Los apuntes sobre el propósito y el uso de cada dependencia están en
+[docs/apuntes/LIBRERIAS.md](docs/apuntes/LIBRERIAS.md).

@@ -112,6 +112,8 @@ como apuntes ejecutables paso a paso.
   localizaciones y 34 en total.
 - Se documento la revision en `docs/REVISION_FASE_1.md` y se actualizaron README,
   pruebas previstas y notebook de referencia.
+- Se creó `docs/apuntes/LIBRERIAS.md` como guía de las dependencias y de los
+  módulos de la biblioteca estándar empleados en el proyecto.
 
 ### Validacion de la implementacion del usuario
 
