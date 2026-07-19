@@ -12,16 +12,23 @@ ubicacion o estado del incendio.
 
 El repositorio contiene la estructura inicial del proyecto y el entorno de
 dependencias validado. En `src/miteco_rag/parseo_y_chuncking.py` ya estan
-implementadas y comprobadas la lectura de PDF por paginas, la limpieza y
-normalizacion de lineas, el hash SHA-256 y la extraccion de metadatos del
-documento. La separacion de bloques por incendio es el siguiente paso.
+implementadas la lectura y normalizacion, los metadatos documentales, la
+maquina de estados geografica y la separacion por incendios. Tambien se han
+anadido extractores de localizacion, estado, situacion operativa, notas, fecha
+de inicio y medios asignados.
+
+Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
+atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
+siete PDF sin errores. La delimitacion de bloques y la presencia de los campos
+se han comprobado, aunque todavia falta validar manualmente la exactitud de las
+notas y los medios extraidos y convertir estas comprobaciones en pruebas pytest.
 
 El material previo utilizado como referencia se conserva en `extras`, pero no
 forma parte del codigo principal.
 
-El corpus local de trabajo contiene actualmente cuatro partes, con 34 bloques
-`Localizacion:`: 33 de Espana y uno de Portugal. Los PDF y los resultados
-generados continuan fuera del control de versiones.
+El corpus local de trabajo contiene actualmente siete partes. La maquina de
+estados delimita 46 bloques `Localizacion:`: 45 de Espana y uno de Portugal.
+Los PDF y los resultados generados continuan fuera del control de versiones.
 
 ## Arquitectura prevista
 

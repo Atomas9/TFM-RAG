@@ -1,58 +1,146 @@
-# Revision de la fase 1
+# Revisión de la fase 1
 
-Fecha de revision: 2026-07-15.
+Fecha de revisión: 2026-07-19.
 
 Archivo revisado: `src/miteco_rag/parseo_y_chuncking.py`.
 
-## Funcionalidad comprobada
+Se ha comprobado la sintaxis, se ha ejecutado la muestra incluida al final del
+archivo y se ha procesado el corpus completo. Durante la revisión se corrigieron
+dos accesos a `clean_text`, ya que el atributo definido por `PDFLine` se llama
+`cleaned_text`.
 
-- La ruta `data/raw/miteco` se resuelve correctamente al ejecutar desde la raiz
-  del repositorio.
-- PyMuPDF abre los cuatro documentos y extrae texto pagina a pagina.
-- Cada linea conserva pagina, numero de linea, texto original, texto limpio y
-  texto normalizado.
-- `clean_line` elimina correctamente espacios sobrantes.
-- `normalize_text` elimina diacriticos y convierte el texto a minusculas.
-- `calculate_sha256` produce un hash diferente y estable para cada PDF.
-- La fecha principal se extrae del contenido del documento.
-- La ultima actualizacion se extrae correctamente cuando esta presente.
-- El tipo de parte se identifica como `definitivo` a partir del nombre.
-- `DocumentMetadata` valida correctamente los metadatos con Pydantic.
+## Estado alcanzado
 
-## Resultados sobre el corpus actual
+El parser ya no se limita a leer y normalizar el PDF. La implementación actual
+incluye:
 
-| Documento | Fecha del parte | Lineas | Localizaciones |
-| --- | --- | ---: | ---: |
-| `ActuacionesMITECO-definitivo.pdf` | 2026-07-05 | 161 | 9 |
-| `ActuacionesMITECO-definitivo-12072026.pdf` | 2026-07-12 | 154 | 9 |
-| `ActuacionesMITECO-definitivo13072026.pdf` | 2026-07-13 | 156 | 10 |
-| `ActuacionesMITECO-definitivo14072026.pdf` | 2026-07-14 | 121 | 6 |
+- lectura de texto por páginas con PyMuPDF;
+- conservación del texto original, limpio y normalizado en `PDFLine`;
+- hash SHA-256 y metadatos comunes del documento;
+- catálogos de comunidades autónomas, provincias, alias y países extranjeros;
+- una máquina de estados que conserva la geografía vigente;
+- separación de incendios en objetos `FireBlock`;
+- exclusión del resumen estadístico situado al final del parte;
+- extracción de la localización;
+- extracción del estado del incendio y de la situación operativa (`S.O.`);
+- extracción de notas y, cuando consta el año, de la fecha de inicio;
+- extracción de medios asignados mediante el modelo `AssignedResource`;
+- obtención de una lista sin duplicados de códigos de medios.
 
-Total provisional antes de construir bloques: 34 localizaciones. De ellas, 33
-corresponden a Espana y una a Portugal.
+La estructura elegida es adecuada para esta fase: primero se delimitan los
+bloques y después cada función interpreta un campo concreto. Esto facilita
+probar y corregir cada extractor de forma independiente.
 
-## Mejoras recomendadas antes del chunking
+## Resultado de las comprobaciones
 
-1. Mover las instrucciones de prueba del final a una funcion `main` y
-   protegerlas con `if __name__ == "__main__"`. Actualmente el archivo imprime
-   y procesa el primer PDF tambien cuando se importa desde otro modulo.
-2. Comprobar que `all_pdf` contiene elementos antes de acceder a `all_pdf[0]`.
-3. Declarar `extract_pdf_lines` como `list[PDFLine]` y tipar tambien la lista
-   interna para mejorar el autocompletado.
-4. Eliminar temporalmente los imports no utilizados (`timezone` e `Iterable`)
-   o conservarlos solo cuando se implementen el informe y la exportacion.
-5. Decidir si `last_update` se almacenara como hora local sin zona o como
-   fecha-hora con la zona `Europe/Madrid`.
-6. Considerar `ConfigDict(extra="forbid")` y restricciones `Field(ge=1)` para
-   que Pydantic detecte campos mal escritos y paginas invalidas.
-7. Mantener el nombre `parseo_y_chuncking.py` mientras se estudia el flujo, pero
-   corregir finalmente `chuncking` a `chunking` antes de exponerlo como modulo
-   estable.
+### Comprobaciones superadas
 
-## Siguiente incremento
+- `python -m py_compile` no detecta errores de sintaxis.
+- La muestra incluida en el archivo procesa el primer PDF.
+- En ese documento se obtienen 9 bloques y los tres primeros devuelven
+  localización, estado, situación operativa, nota y códigos de medios.
+- Las fechas principales y las últimas actualizaciones se extraen de los siete
+  documentos.
+- El recorrido completo finaliza sin errores sobre los siete PDF.
+- La máquina de estados delimita 46 bloques: 45 de España y uno de Portugal.
+- Los 46 bloques contienen un estado reconocible.
 
-Crear catalogos normalizados de comunidades y provincias y, despues,
-implementar una maquina de estados que conserve comunidad y provincia entre
-localizaciones consecutivas. Todavia no corresponde extraer embeddings ni
-insertar datos en ChromaDB.
+### Error detectado y corregido
 
+El modelo `PDFLine` define el atributo `cleaned_text`, pero hay dos accesos a un
+atributo inexistente llamado `clean_text`:
+
+1. En la rama que reconoce un país extranjero:
+
+   ```python
+   current_province = line.clean_text
+   ```
+
+2. Al unir las líneas que continúan una nota:
+
+   ```python
+   line.clean_text
+   ```
+
+Ambos accesos se corrigieron para usar `line.cleaned_text`. Antes de la
+corrección, el primer caso hacía que la ejecución terminara con `AttributeError`
+al alcanzar Portugal; el segundo podía fallar cuando una nota tuviera contenido
+en líneas posteriores.
+
+La prueba del final del archivo no descubría el problema porque solo muestra
+los tres primeros bloques del primer PDF. El recorrido completo posterior a la
+corrección confirma que el error ha quedado resuelto.
+
+## Resultados del corpus actual
+
+Los recuentos siguientes se obtuvieron con el parser corregido:
+
+| Documento | Fecha obtenida del contenido | Líneas | Bloques | No españoles |
+| --- | --- | ---: | ---: | ---: |
+| `ActuacionesMITECO-definitivo.pdf` | 2026-07-05 | 161 | 9 | 1 |
+| `ActuacionesMITECO-definitivo-12072026.pdf` | 2026-07-12 | 154 | 9 | 0 |
+| `ActuacionesMITECO-definitivo13072026.pdf` | 2026-07-13 | 156 | 10 | 0 |
+| `ActuacionesMITECO-definitivo14072026.pdf` | 2026-07-14 | 121 | 6 | 0 |
+| `ActuacionesMITECO-definitivo15072025.pdf` | 2026-07-15 | 122 | 5 | 0 |
+| `ActuacionesMITECO-definitivo17072026.pdf` | 2026-07-17 | 127 | 4 | 0 |
+| `ActuacionesMITECO-definitivo18072026.pdf` | 2026-07-18 | 121 | 3 | 0 |
+| **Total** |  | **962** | **46** | **1** |
+
+El archivo `ActuacionesMITECO-definitivo15072025.pdf` contiene un parte fechado
+el 15 de julio de 2026. El año `2025` del nombre parece una errata del nombre
+local. Para los metadatos se debe mantener como autoridad la fecha extraída del
+contenido, conservando también `source_file` para trazabilidad.
+
+## Aspectos que todavía requieren validación
+
+### Medios asignados
+
+El extractor produce 135 objetos `AssignedResource` en los siete documentos,
+pero esta cifra aún no es una prueba de exactitud. Falta
+comparar cada salida con las líneas originales para comprobar:
+
+- que no se incorporan encabezados como continuación del medio anterior;
+- que `RESOURCE_PATTERN` reconoce todos los formatos de código;
+- que cantidad, código y descripción se separan correctamente;
+- cómo extraer `origin`, que actualmente siempre queda en `None`.
+
+### Notas y fechas de inicio
+
+Se detectan 27 bloques con nota y 4 fechas de inicio con año completo. Deben
+añadirse pruebas para notas partidas entre páginas y fechas sin año. El parser
+hace bien en no inventar el año cuando el documento no lo contiene.
+
+### Estados
+
+Los 46 bloques actuales contienen un estado reconocido. Aun así, el patrón
+solo acepta un estado formado por una palabra. Conviene conservar una prueba
+con cada valor real encontrado y otra con un estado desconocido.
+
+## Mejoras pendientes
+
+1. Mover la demostración del final a una función `main()` y protegerla con
+   `if __name__ == "__main__"`; ahora importar el módulo procesa un PDF e
+   imprime resultados.
+2. Comprobar que existen PDF antes de acceder a `all_pdf[0]`.
+3. Añadir pruebas pytest reales; `tests/` todavía solo contiene su README.
+4. Tipar el retorno de `extract_pdf_lines()` como `list[PDFLine]` y su lista
+   interna.
+5. Decidir cómo representar la zona horaria de `last_update`; `timezone` sigue
+   importado sin utilizarse.
+6. Construir el modelo final del incendio que combine `DocumentMetadata`,
+   `FireBlock`, localización, estado, nota y medios.
+7. Validar y exportar esos registros a JSONL antes de generar embeddings.
+8. Corregir finalmente `chuncking` a `chunking` cuando el módulo deje de ser un
+   archivo de aprendizaje y se convierta en una interfaz estable.
+
+## Siguiente incremento recomendado
+
+El siguiente paso no debería ser ChromaDB todavía. Primero conviene:
+
+1. crear pruebas para los recuentos de los siete PDF y para Portugal;
+2. inspeccionar manualmente una muestra de medios y notas;
+3. definir el modelo Pydantic final de un incendio;
+4. exportar y validar un JSONL reproducible.
+
+Cuando esos pasos sean estables, cada registro del JSONL podrá convertirse en
+un chunk y enriquecerse con su embedding.

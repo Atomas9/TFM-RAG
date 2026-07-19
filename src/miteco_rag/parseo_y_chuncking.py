@@ -169,6 +169,23 @@ LAST_UPDATE_PATTERN = re.compile(
     r"(\d{1,2})/(\d{1,2})/(\d{4})"
 )
 
+STATUS_PATTERN = re.compile(
+    r"estado\s+del\s+incendio\s*:\s*"
+    r"([A-ZÁÉÍÓÚÜÑ]+)"
+    r"(?:\s+S\.O\s*:\s*([A-Z0-9]+))?",
+    flags=re.IGNORECASE,
+)
+
+INCIDENT_START_PATTERN = re.compile(
+    r"incendio\s+iniciado\s+el\s+"
+    r"(\d{1,2})/(\d{1,2})/(\d{4})?",
+    flags=re.IGNORECASE,
+)
+
+RESOURCE_PATTERN = re.compile(
+    r"^(\d+)\s+([A-ZÁÉÍÓÚÜÑ]+(?:-[A-ZÁÉÍÓÚÜÑ]+)?)\b\s*(.*)$"
+)
+
 # ------------------
 # CLASES
 # ------------------
@@ -199,6 +216,14 @@ class FireBlock(BaseModel):
     page_start: int = Field(ge=1)
     page_end: int = Field(ge=1)
     lines: list[PDFLine]
+
+class AssignedResource(BaseModel):
+    """Medio asignado extraído del bloque del incendio."""
+    raw_text: str
+    quantity: int | None = Field(default=None, ge=1)
+    code: str | None = None
+    description: str | None = None
+    origin: str | None = None
 
 # ------------------
 # FUNCIONES
@@ -430,7 +455,7 @@ def split_fire_blocks(lines: list[PDFLine]) -> list[FireBlock]:
             close_current_block()
             current_country = FOREIGN_COUNTRIES[normalized]
             current_community = None
-            current_province = line.clean_text
+            current_province = line.cleaned_text
             continue
 
         province_candidate = PROVINCE_TO_COMMUNITY.get(normalized)
@@ -485,6 +510,140 @@ def split_fire_blocks(lines: list[PDFLine]) -> list[FireBlock]:
 
     return blocks
 
+def block_text(block: FireBlock) -> str:
+    """Une las líneas de un bloque sin perder sus límites semánticos."""
+
+    return "\n".join(line.cleaned_text for line in block.lines)
+
+
+def extract_location(block: FireBlock) -> str:
+    """Obtiene el valor situado después del primer signo de dos puntos."""
+
+    first_line = block.lines[0].cleaned_text
+
+    if ":" not in first_line:
+        raise ValueError(f"Bloque {block.ordinal} sin localización válida")
+
+    location = clean_line(first_line.split(":", maxsplit=1)[1])
+
+    if not location:
+        raise ValueError(f"Bloque {block.ordinal} con localización vacía")
+
+    return location
+
+
+def extract_status(block: FireBlock) -> tuple[str | None, str | None]:
+    """Devuelve estado y situación operativa como valores separados."""
+
+    match = STATUS_PATTERN.search(block_text(block))
+    if not match:
+        return None, None
+
+    status = match.group(1).upper()
+    operational_status = (
+        match.group(2).upper()
+        if match.group(2)
+        else None
+    )
+    return status, operational_status
+
+
+def extract_note(
+    block: FireBlock,
+) -> tuple[str | None, date | None]:
+    """Extrae la nota y una fecha de inicio solo cuando incluye año."""
+
+    note_start: int | None = None
+
+    for index, line in enumerate(block.lines):
+        if line.normalized_text.startswith("nota:"):
+            note_start = index
+            break
+
+    if note_start is None:
+        return None, None
+
+    first_note_line = block.lines[note_start].cleaned_text.split(
+        ":", maxsplit=1
+    )[1]
+    continuation = [
+        line.cleaned_text
+        for line in block.lines[note_start + 1 :]
+    ]
+    note = clean_line(" ".join([first_note_line, *continuation]))
+
+    start_match = INCIDENT_START_PATTERN.search(note)
+    if not start_match or not start_match.group(3):
+        # Si falta el año conservamos la nota, pero no inventamos la fecha.
+        return note, None
+
+    day, month, year = map(int, start_match.groups())
+    return note, date(year, month, day)
+
+
+def extract_assigned_resources(
+    block: FireBlock,
+) -> tuple[list[AssignedResource], list[str]]:
+    """Extrae medios sin exigir una estructura perfecta en la primera fase."""
+
+    resources: list[AssignedResource] = []
+    inside_resources = False
+
+    for line in block.lines:
+        normalized = line.normalized_text
+
+        if normalized.startswith("medios asignados por el miteco"):
+            inside_resources = True
+            continue
+
+        if not inside_resources:
+            continue
+
+        # La línea de estado no es un medio.
+        if normalized.startswith("estado del incendio"):
+            continue
+
+        # La nota marca el final de la lista de medios.
+        if normalized.startswith("nota:"):
+            break
+
+        match = RESOURCE_PATTERN.match(line.cleaned_text)
+
+        if match:
+            quantity = int(match.group(1))
+            code = match.group(2).upper()
+            description = clean_line(match.group(3)) or None
+
+            resources.append(
+                AssignedResource(
+                    raw_text=line.cleaned_text,
+                    quantity=quantity,
+                    code=code,
+                    description=description,
+                    origin=None,
+                )
+            )
+        elif resources:
+            # Una línea sin cantidad continúa la descripción anterior.
+            previous = resources[-1]
+            previous.raw_text = clean_line(
+                f"{previous.raw_text} {line.cleaned_text}"
+            )
+            previous.description = clean_line(
+                f"{previous.description or ''} {line.cleaned_text}"
+            )
+
+    # dict.fromkeys elimina duplicados conservando el orden.
+    resource_codes = list(
+        dict.fromkeys(
+            resource.code
+            for resource in resources
+            if resource.code
+        )
+    )
+
+    return resources, resource_codes
+
 # ------------------
 # 
 # ------------------
@@ -511,8 +670,13 @@ for block in sample_blocks[:3]:
     )
 
 
-
-
+for block in sample_blocks[:3]:
+    print(
+        extract_location(block),
+        extract_status(block),
+        extract_note(block),
+        extract_assigned_resources(block)[1],
+    )
 
 
 

@@ -130,3 +130,59 @@ como apuntes ejecutables paso a paso.
 
 Anadir la proteccion `if __name__ == "__main__"`, controlar la carpeta sin PDF y
 comenzar los catalogos geograficos antes de implementar la maquina de estados.
+
+## 2026-07-19
+
+### Objetivo
+
+Revisar la ampliacion realizada en `parseo_y_chuncking.py` y actualizar la
+documentacion con el estado real de la fase 1.
+
+### Trabajo realizado
+
+- Se revisaron los nuevos patrones de estado, fecha de inicio y medios.
+- Se reviso el modelo Pydantic `AssignedResource`.
+- Se comprobo la maquina de estados geografica y la separacion en `FireBlock`.
+- Se revisaron los extractores de localizacion, estado, nota y medios
+  asignados.
+- Se incorporaron tres partes nuevos al inventario local: 15, 17 y 18 de julio.
+- Se actualizaron README, `docs/REVISION_FASE_1.md` y `tests/README.md`.
+- A peticion del usuario, se corrigieron las dos referencias a
+  `line.clean_text` para usar `line.cleaned_text`.
+
+### Decisiones
+
+- Se mantiene la separacion en dos pasos: delimitacion del bloque y extraccion
+  posterior de sus campos.
+- La fecha del contenido del parte sera la autoridad para `report_date`; el
+  nombre original se conservara como trazabilidad.
+- No se avanzara a embeddings hasta disponer de registros completos validados
+  y exportables a JSONL.
+
+### Validacion
+
+- `python -m py_compile src/miteco_rag/parseo_y_chuncking.py`: correcto.
+- La demostracion incluida procesa el primer PDF y obtiene 9 bloques.
+- El corpus contiene 7 PDF, 962 lineas utiles y 46 bloques candidatos.
+- El parser corregido completa los siete PDF y obtiene 45 bloques de Espana y
+  uno de Portugal sin errores.
+- Los 46 bloques contienen un estado reconocible.
+- El diagnostico produce 27 notas, 4 fechas de inicio completas y 135 objetos
+  de medios, pendientes de contrastar manualmente con el PDF.
+
+### Problemas o riesgos
+
+- Las dos erratas `line.clean_text` quedaron corregidas durante la revision.
+- La demostracion manual solo recorre tres bloques; por eso no sustituye a una
+  prueba automatizada del corpus completo.
+- El archivo `ActuacionesMITECO-definitivo15072025.pdf` contiene realmente el
+  parte del 15 de julio de 2026.
+- Todavia no hay pruebas pytest implementadas ni un modelo final que agrupe
+  todos los campos del incendio.
+- El campo `origin` de `AssignedResource` aun no se extrae.
+
+### Siguiente paso
+
+Crear pruebas automatizadas para los siete documentos. Despues se validaran
+notas y medios contra una muestra real, se construira el modelo final del
+incendio y se exportara el primer JSONL.
