@@ -14,7 +14,8 @@ MITECO
   -> extraccion por paginas con PyMuPDF
   -> parser especifico basado en una maquina de estados
   -> validacion de FireSnapshot con Pydantic
-  -> exportacion JSONL en data/processed
+  -> validacion agregada y ParserReport
+  -> exportacion JSONL y JSON en data/processed
   -> embeddings BAAI/bge-m3
   -> ChromaDB en data/chroma
 ```
@@ -81,6 +82,21 @@ La orquestacion se divide en dos niveles:
 El orden determinista permite repetir una ejecucion y comparar su salida. La
 deduplicacion por `incident_key` queda expresamente fuera de esta etapa porque
 un mismo incendio puede tener un snapshot diferente cada dia.
+
+`validate_snapshots()` comprueba identificadores duplicados, rangos de paginas,
+contaminacion con el resumen estadistico y ausencias relevantes. Los errores
+bloquean la exportacion; las advertencias se conservan en el informe.
+
+`run_phase1()` genera:
+
+- `fire_snapshots.jsonl`: un objeto `FireSnapshot` por linea;
+- `parser_report.json`: version del parser, instante UTC, documentos, recuentos,
+  advertencias y errores de la ejecucion.
+
+La salida se reconstruye desde todos los PDF en cada ejecucion. Este enfoque es
+deliberado mientras el corpus sea pequeno y el esquema siga evolucionando. Una
+futura ingesta incremental comparara `source_sha256` y `parser_version` antes de
+decidir que documentos deben reprocesarse.
 
 ## Metadatos minimos
 

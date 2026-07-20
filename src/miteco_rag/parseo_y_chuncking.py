@@ -7,23 +7,23 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from datetime import date, datetime, timezone
 from typing import Iterable, Literal
+from collections import Counter
 
 import pymupdf
 import re
 import unicodedata
 import hashlib
+import json
 
 # ------------------
 # CONSTANTES
 # ------------------
 INPUT_DIR = Path('data/raw/miteco')
+SNAPSHOTS_PATH = Path("data/processed/fire_snapshots.jsonl")
+REPORT_PATH = Path("data/processed/parser_report.json")
 LOCATION_PREFIXES = ("localizacion:",)
 SUMMARY_PREFIX = "actuaciones de los medios del ministerio" #texto que marca el resumen final del documento, cuando aparece, ya no hay más incendios
 PARSER_VERSION = "0.1.0"
-
-print('------------------')
-print(INPUT_DIR)
-print(INPUT_DIR.exists())
 
 # ------------------
 # DICCIONARIOS
@@ -260,6 +260,18 @@ class FireSnapshot(BaseModel):
 
     raw_text: str = Field(min_length=1)
     chunk_text: str = Field(min_length=1)
+
+class ParserReport(BaseModel):
+    """Informe de calidad y recuentos de la ejecución."""
+    parser_version: str = PARSER_VERSION
+    generated_at: datetime
+    processed_files: list[str]
+    snapshots_by_file: dict[str, int]
+    total_snapshots: int = Field(ge=0)
+    spanish_snapshots: int = Field(ge=0)
+    foreign_snapshots: int = Field(ge=0)
+    warnings: list[str]
+    errors: list[str]
 
 # ------------------
 # FUNCIONES
@@ -867,41 +879,161 @@ def parse_pdf_directory(input_dir: Path) -> list[FireSnapshot]:
 
     return snapshots
 
-# ------------------
-# 
-# ------------------
-all_pdf = sorted(INPUT_DIR.glob('*.pdf'))
-pdf1 = all_pdf[0]
-pdf1_lines = extract_pdf_lines(pdf1)
+def validate_snapshots(
+    snapshots: list[FireSnapshot],
+) -> tuple[list[str], list[str]]:
+    """Comprueba unicidad, geografía, páginas y contaminación del resumen."""
 
-print(pdf1.name)
-print(f'Número de líneas extraídas: {len(pdf1_lines)}')
-for line in pdf1_lines[:5]:  # Mostrar solo las primeras 5 líneas para no saturar la salida
-    print(f'Página {line.page_number}, Línea {line.line_number}: {line.cleaned_text}')
+    warnings: list[str] = []
+    errors: list[str] = []
 
-sample_document = extract_document_metadata(pdf1, pdf1_lines)
-print(sample_document)
+    snapshot_ids = [snapshot.snapshot_id for snapshot in snapshots]
+    duplicated_ids = [
+        identifier
+        for identifier, count in Counter(snapshot_ids).items()
+        if count > 1
+    ]
 
-sample_blocks = split_fire_blocks(pdf1_lines)
-print("Bloques encontrados:", len(sample_blocks))
-for block in sample_blocks[:3]:
-    print(
-        block.ordinal,
-        block.autonomous_community,
-        block.province,
-        block.lines[0].cleaned_text,
+    if duplicated_ids:
+        errors.append(
+            f"snapshot_id duplicados: {duplicated_ids}"
+        )
+
+    for snapshot in snapshots:
+        label = f"{snapshot.source_file}:{snapshot.location}"
+
+        if snapshot.page_start > snapshot.page_end:
+            errors.append(f"{label}: rango de páginas inválido")
+
+        if SUMMARY_PREFIX in normalize_text(snapshot.raw_text):
+            errors.append(f"{label}: contiene el resumen estadístico")
+
+        if snapshot.country == "ES" and not snapshot.province:
+            warnings.append(f"{label}: provincia española ausente")
+
+        if not snapshot.resource_codes:
+            warnings.append(f"{label}: no se detectaron códigos de medios")
+
+    return warnings, errors
+
+
+def create_parser_report(
+    snapshots: list[FireSnapshot],
+    processed_files: Iterable[Path],
+    warnings: list[str],
+    errors: list[str],
+) -> ParserReport:
+    """Resume recuentos por documento y país."""
+
+    snapshots_by_file = dict(
+        sorted(Counter(
+            snapshot.source_file
+            for snapshot in snapshots
+        ).items())
+    )
+
+    return ParserReport(
+        generated_at=datetime.now(timezone.utc),
+        processed_files=[
+            path.name
+            for path in sorted(processed_files)
+        ],
+        snapshots_by_file=snapshots_by_file,
+        total_snapshots=len(snapshots),
+        spanish_snapshots=sum(
+            snapshot.country == "ES"
+            for snapshot in snapshots
+        ),
+        foreign_snapshots=sum(
+            snapshot.country != "ES"
+            for snapshot in snapshots
+        ),
+        warnings=warnings,
+        errors=errors,
     )
 
 
-for block in sample_blocks[:3]:
-    print(
-        extract_location(block),
-        extract_status(block),
-        extract_note(block),
-        extract_assigned_resources(block)[1],
+def write_snapshots_jsonl(
+    snapshots: Iterable[FireSnapshot],
+    output_path: Path,
+) -> None:
+    """Escribe un objeto JSON por línea."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w", encoding="utf-8") as file:
+        for snapshot in snapshots:
+            serialized = snapshot.model_dump(mode="json")
+            file.write(
+                json.dumps(serialized, ensure_ascii=False) + "\n"
+            )
+
+
+def write_parser_report(
+    report: ParserReport,
+    output_path: Path,
+) -> None:
+    """Guarda el informe con indentación para revisión humana."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w", encoding="utf-8") as file:
+        json.dump(
+            report.model_dump(mode="json"),
+            file,
+            ensure_ascii=False,
+            indent=2,
+        )
+        file.write("\n")
+
+
+def run_phase1(
+    input_dir: Path,
+    snapshots_path: Path,
+    report_path: Path,
+) -> ParserReport:
+    """Parsea, valida y exporta el corpus completo de la fase 1."""
+
+    pdf_files = sorted(input_dir.glob("*.pdf"))
+    snapshots = parse_pdf_directory(input_dir)
+    warnings, errors = validate_snapshots(snapshots)
+    report = create_parser_report(
+        snapshots=snapshots,
+        processed_files=pdf_files,
+        warnings=warnings,
+        errors=errors,
     )
 
+    if errors:
+        raise RuntimeError(
+            "No se exporta porque el parser contiene errores: "
+            + "; ".join(errors)
+        )
+
+    write_snapshots_jsonl(snapshots, snapshots_path)
+    write_parser_report(report, report_path)
+    return report
 
 
+def main() -> None:
+    """Ejecuta la fase 1 usando las rutas configuradas del proyecto."""
+
+    report = run_phase1(
+        input_dir=INPUT_DIR,
+        snapshots_path=SNAPSHOTS_PATH,
+        report_path=REPORT_PATH,
+    )
+
+    print(json.dumps(
+        report.model_dump(mode="json"),
+        ensure_ascii=False,
+        indent=2,
+    ))
+    print("Snapshots:", SNAPSHOTS_PATH.resolve())
+    print("Informe:", REPORT_PATH.resolve())
+
+
+if __name__ == "__main__":
+    main()
 
 

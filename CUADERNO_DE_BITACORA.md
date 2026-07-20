@@ -210,6 +210,15 @@ texto que se utilizara para generar embeddings.
   documento.
 - Se implemento `parse_pdf_directory()` para recorrer el corpus en orden
   determinista sin deduplicar snapshots diarios.
+- Se implemento `validate_snapshots()` con comprobaciones de identificadores,
+  paginas, geografia, medios y contaminacion del resumen.
+- Se incorporo el modelo `ParserReport` y su resumen de archivos, paises,
+  advertencias y errores.
+- Se implementaron `write_snapshots_jsonl()` y `write_parser_report()`.
+- Se implemento `run_phase1()` como orquestador de parseo, validacion y
+  persistencia.
+- Se elimino la ejecucion automatica durante los imports mediante `main()` e
+  `if __name__ == "__main__"`.
 - Se incorporo el parte del 19 de julio al corpus local.
 - Se actualizaron README, arquitectura, revision tecnica y pruebas previstas.
 
@@ -237,6 +246,13 @@ texto que se utilizara para generar embeddings.
   y conservan los 8 documentos.
 - Una carpeta vacia y un PDF inexistente generan `FileNotFoundError` con un
   mensaje explicito.
+- El archivo `fire_snapshots.jsonl` contiene 48 lineas JSON validas y
+  reconstruibles como `FireSnapshot`.
+- `parser_report.json` contiene los 8 documentos, 48 snapshots, cero
+  advertencias y cero errores.
+- La serializacion conserva fechas, modelos anidados, tildes y texto UTF-8.
+- La importacion del modulo no procesa el corpus ni escribe archivos.
+- Ambos artefactos generados estan ignorados por Git.
 
 ### Problemas o riesgos
 
@@ -245,11 +261,13 @@ texto que se utilizara para generar embeddings.
 - Un mismo incendio puede dividirse si la fecha de inicio solo aparece en uno
   de sus partes; el corpus actual muestra este caso en Villablino.
 - Los medios y notas aun deben contrastarse manualmente con los PDF.
-- La demostracion del modulo sigue ejecutandose durante los imports.
 - Todavia no existen pruebas pytest implementadas.
+- La ejecucion actual reprocesa todos los PDF y sobrescribe las salidas; la
+  indexacion incremental queda para una fase posterior.
 
 ### Siguiente paso
 
-Crear las pruebas del modelo, identificadores y orquestacion; proteger la
-demostracion con `if __name__ == "__main__"`; e implementar la validacion
-agregada. Despues se podra exportar el primer JSONL.
+Continuar con la generacion de embeddings normalizados de `chunk_text` mediante
+`BAAI/bge-m3` y almacenar vectores, documentos y metadatos planos en una
+coleccion persistente de ChromaDB. La primera version reconstruira por completo
+el indice.

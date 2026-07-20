@@ -18,5 +18,11 @@ Las primeras pruebas automatizadas comprobaran:
 - que `parse_pdf_directory()` conserva los 48 snapshots y un orden
   determinista;
 - que una carpeta vacia y un PDF inexistente generan `FileNotFoundError`;
+- que importar el modulo no ejecuta el pipeline ni escribe archivos;
+- que `validate_snapshots()` bloquea identificadores duplicados y contaminacion
+  con el resumen estadistico;
+- que `run_phase1()` genera 48 lineas JSONL validas y un `ParserReport`
+  coherente;
+- que fechas, tildes y modelos anidados sobreviven a la serializacion JSON;
 - la insercion y consulta de embeddings propios en ChromaDB;
 - los filtros exactos por ubicacion, provincia, estado y fecha.

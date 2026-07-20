@@ -44,6 +44,12 @@ un PDF en sus snapshots y `parse_pdf_directory()` procesa todos los PDF de una
 carpeta en orden determinista, sin deduplicar observaciones de dias distintos.
 Las rutas inexistentes o las carpetas sin PDF producen errores explicitos.
 
+`run_phase1()` valida el corpus y genera dos artefactos reproducibles:
+`data/processed/fire_snapshots.jsonl`, con un snapshot por linea, y
+`data/processed/parser_report.json`, con los archivos procesados, recuentos,
+advertencias y errores. La importacion del modulo no ejecuta el pipeline; la
+escritura solo se produce al ejecutar el archivo como programa.
+
 ## Arquitectura prevista
 
 1. Descarga y almacenamiento inmutable de los PDF de MITECO.
@@ -95,6 +101,23 @@ plataformas que disponen de wheels compatibles.
 Los PDF descargados no se suben a Git. Deben guardarse en
 `data/raw/miteco/`. Consulta [data/README.md](data/README.md) para conocer las
 reglas del corpus.
+
+Para reconstruir la salida procesada completa:
+
+```bash
+python src/miteco_rag/parseo_y_chuncking.py
+```
+
+La implementacion actual vuelve a procesar todos los PDF y reemplaza los dos
+artefactos de `data/processed`. Tanto los PDF como las salidas procesadas estan
+excluidos de Git porque son datos regenerables.
+
+## Siguiente fase
+
+La proxima fase generara embeddings de `chunk_text` con `BAAI/bge-m3` y
+almacenara cada vector, documento y conjunto plano de metadatos en ChromaDB. La
+primera version reconstruira completamente la coleccion para evitar registros
+obsoletos; la indexacion incremental se abordara cuando el formato sea estable.
 
 ## Alcance inicial
 

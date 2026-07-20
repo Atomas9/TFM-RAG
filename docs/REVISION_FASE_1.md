@@ -4,10 +4,9 @@ Fecha de revisión: 2026-07-20.
 
 Archivo revisado: `src/miteco_rag/parseo_y_chuncking.py`.
 
-Se ha comprobado la sintaxis, se ha ejecutado la muestra incluida al final del
-archivo y se ha procesado el corpus completo. Durante la revisión se corrigieron
-dos accesos a `clean_text`, ya que el atributo definido por `PDFLine` se llama
-`cleaned_text`.
+Se ha comprobado la sintaxis, se ha procesado el corpus completo y se han
+validado los artefactos generados. El módulo ya no ejecuta demostraciones ni
+escribe archivos durante su importación.
 
 ## Estado alcanzado
 
@@ -32,6 +31,12 @@ incluye:
 - versionado de la salida mediante `parser_version`;
 - orquestación completa de un PDF mediante `parse_miteco_pdf()`;
 - procesamiento determinista del corpus mediante `parse_pdf_directory()`.
+- validación agregada mediante `validate_snapshots()`;
+- informe de ejecución validado como `ParserReport`;
+- exportación de un snapshot por línea en `fire_snapshots.jsonl`;
+- exportación del informe en `parser_report.json`;
+- orquestación completa mediante `run_phase1()` y una entrada `main()`
+  protegida con `if __name__ == "__main__"`.
 
 La estructura elegida es adecuada para esta fase: primero se delimitan los
 bloques y después cada función interpreta un campo concreto. Esto facilita
@@ -59,6 +64,13 @@ probar y corregir cada extractor de forma independiente.
   consecutivas y conserva los 8 documentos.
 - Una carpeta sin PDF genera `FileNotFoundError` con la ruta inspeccionada.
 - Un PDF inexistente genera `FileNotFoundError` antes de intentar abrirlo.
+- Importar el módulo no procesa PDF ni escribe archivos.
+- El JSONL contiene 48 líneas JSON válidas y reconstruibles como
+  `FireSnapshot`.
+- Los 48 registros serializados mantienen identificadores únicos y texto UTF-8.
+- El informe se reconstruye correctamente como `ParserReport`, contiene los 8
+  documentos, 47 snapshots españoles, uno extranjero y cero errores.
+- `fire_snapshots.jsonl` y `parser_report.json` están excluidos de Git.
 
 ### Error detectado y corregido
 
@@ -154,30 +166,27 @@ trabajará sobre el corpus ordenado cronológicamente.
 
 ## Mejoras pendientes
 
-1. Mover la demostración del final a una función `main()` y protegerla con
-   `if __name__ == "__main__"`; ahora importar el módulo procesa un PDF e
-   imprime resultados.
-2. Comprobar que existen PDF antes de acceder a `all_pdf[0]`.
-3. Añadir pruebas pytest reales; `tests/` todavía solo contiene su README.
-4. Tipar el retorno de `extract_pdf_lines()` como `list[PDFLine]` y su lista
+1. Añadir pruebas pytest reales; `tests/` todavía solo contiene su README.
+2. Tipar el retorno de `extract_pdf_lines()` como `list[PDFLine]` y su lista
    interna.
-5. Decidir cómo representar la zona horaria de `last_update`; `timezone` sigue
-   importado sin utilizarse.
-6. Añadir una fase posterior de resolución temporal para convertir las claves
+3. Decidir cómo representar la zona horaria local de `last_update`; el instante
+   de generación del informe ya se almacena en UTC.
+4. Añadir una fase posterior de resolución temporal para convertir las claves
    heurísticas en episodios confirmados o marcados como ambiguos.
-7. Validar y exportar los `FireSnapshot` a JSONL antes de generar embeddings.
-8. Corregir finalmente `chuncking` a `chunking` cuando el módulo deje de ser un
+5. Corregir finalmente `chuncking` a `chunking` cuando el módulo deje de ser un
    archivo de aprendizaje y se convierta en una interfaz estable.
 
 ## Siguiente incremento recomendado
 
-El siguiente paso no debería ser ChromaDB todavía. Primero conviene:
+La salida estructurada ya permite comenzar la siguiente fase:
 
-1. crear pruebas para los recuentos de los ocho PDF y para Portugal;
-2. inspeccionar manualmente una muestra de medios y notas;
-3. probar la estabilidad y las limitaciones conocidas de ambos identificadores;
-4. implementar la validación agregada del corpus;
-5. exportar y validar un JSONL reproducible.
+1. cargar y validar `fire_snapshots.jsonl`;
+2. seleccionar los 47 snapshots de España;
+3. generar embeddings normalizados de `chunk_text` con `BAAI/bge-m3`;
+4. convertir los metadatos a valores planos compatibles con ChromaDB;
+5. reconstruir una colección persistente usando `snapshot_id` como ID;
+6. comprobar recuperación semántica, filtros exactos y consultas combinadas.
 
-Cuando esos pasos sean estables, cada registro del JSONL podrá convertirse en
-un chunk y enriquecerse con su embedding.
+La revisión manual de medios y notas y la creación de pruebas pytest continúan
+como trabajo de calidad paralelo, pero no bloquean el primer prototipo del
+índice vectorial.
