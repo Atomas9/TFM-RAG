@@ -15,20 +15,29 @@ dependencias validado. En `src/miteco_rag/parseo_y_chuncking.py` ya estan
 implementadas la lectura y normalizacion, los metadatos documentales, la
 maquina de estados geografica y la separacion por incendios. Tambien se han
 anadido extractores de localizacion, estado, situacion operativa, notas, fecha
-de inicio y medios asignados.
+de inicio y medios asignados. Estos datos ya se integran en un `FireSnapshot`
+validado por Pydantic, con identificadores reproducibles, texto original y un
+`chunk_text` autosuficiente preparado para la futura generación de embeddings.
 
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
-siete PDF sin errores. La delimitacion de bloques y la presencia de los campos
-se han comprobado, aunque todavia falta validar manualmente la exactitud de las
-notas y los medios extraidos y convertir estas comprobaciones en pruebas pytest.
+ocho PDF sin errores. La delimitacion de bloques, la construcción de snapshots
+y la presencia de los campos se han comprobado, aunque todavia falta validar
+manualmente la exactitud de las notas y los medios extraidos y convertir estas
+comprobaciones en pruebas pytest.
 
 El material previo utilizado como referencia se conserva en `extras`, pero no
 forma parte del codigo principal.
 
-El corpus local de trabajo contiene actualmente siete partes. La maquina de
-estados delimita 46 bloques `Localizacion:`: 45 de Espana y uno de Portugal.
+El corpus local de trabajo contiene actualmente ocho partes. La maquina de
+estados delimita 48 bloques `Localizacion:`: 47 de Espana y uno de Portugal.
 Los PDF y los resultados generados continuan fuera del control de versiones.
+
+`snapshot_id` identifica de forma unica una observacion dentro de un parte.
+`incident_key` es una clave heuristica para agrupar observaciones que podrian
+pertenecer al mismo incendio: utiliza geografia, localizacion y fecha de inicio
+cuando esta existe. No debe interpretarse todavia como una identidad definitiva
+si MITECO no proporciona la fecha de inicio.
 
 ## Arquitectura prevista
 

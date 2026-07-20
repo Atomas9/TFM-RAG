@@ -2,13 +2,17 @@
 
 Las primeras pruebas automatizadas comprobaran:
 
-- los recuentos actuales de 9, 9, 10, 6, 5, 4 y 3 incendios en los siete PDF de
-  referencia, con 46 snapshots en total;
+- los recuentos actuales de 9, 9, 10, 6, 5, 4, 3 y 2 incendios en los ocho PDF
+  de referencia, con 48 snapshots en total;
 - el numero de incendios extraidos de cada PDF de referencia;
 - la conservacion de comunidad y provincia entre incendios consecutivos;
 - la extraccion de fecha, estado, situacion operativa y pagina;
 - la extraccion de notas, fechas de inicio y medios asignados;
 - la exclusion de registros que no correspondan a Espana;
 - la ausencia del resumen estadistico dentro del ultimo chunk;
+- la unicidad y estabilidad de los 48 `snapshot_id`;
+- la agrupacion heuristica de ubicaciones repetidas mediante `incident_key`;
+- el caso de Villablino, cuya fecha de inicio no aparece en todos los partes;
+- que `incident_key` no se utiliza para eliminar snapshots;
 - la insercion y consulta de embeddings propios en ChromaDB;
 - los filtros exactos por ubicacion, provincia, estado y fecha.

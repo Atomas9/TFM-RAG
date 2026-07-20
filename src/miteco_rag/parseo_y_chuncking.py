@@ -19,6 +19,7 @@ import hashlib
 INPUT_DIR = Path('data/raw/miteco')
 LOCATION_PREFIXES = ("localizacion:",)
 SUMMARY_PREFIX = "actuaciones de los medios del ministerio" #texto que marca el resumen final del documento, cuando aparece, ya no hay más incendios
+PARSER_VERSION = "0.1.0"
 
 print('------------------')
 print(INPUT_DIR)
@@ -224,6 +225,41 @@ class AssignedResource(BaseModel):
     code: str | None = None
     description: str | None = None
     origin: str | None = None
+
+class FireSnapshot(BaseModel):
+    """Estado de un incendio en un parte diario concreto."""
+    snapshot_id: str
+    incident_key: str
+    document_id: str
+
+    country: str
+    autonomous_community: str | None
+    autonomous_community_normalized: str | None
+    province: str | None
+    province_normalized: str | None
+    location: str
+    location_normalized: str
+
+    status: str | None
+    operational_status: str | None
+    note: str | None
+    incident_start_date: date | None
+    assigned_resources: list[AssignedResource]
+    resource_codes: list[str]
+
+    report_date: date
+    report_date_number: int
+    last_update: datetime | None
+    page_start: int = Field(ge=1)
+    page_end: int = Field(ge=1)
+
+    source_file: str
+    source_url: str | None
+    source_sha256: str
+    parser_version: str = PARSER_VERSION
+
+    raw_text: str = Field(min_length=1)
+    chunk_text: str = Field(min_length=1)
 
 # ------------------
 # FUNCIONES
@@ -643,6 +679,157 @@ def extract_assigned_resources(
     )
 
     return resources, resource_codes
+
+def short_sha256(value: str, length: int = 20) -> str:
+    """Hash corto y determinista para identificadores internos."""
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:length]
+
+
+def build_snapshot_id(
+    document: DocumentMetadata,
+    block: FireBlock,
+    location_normalized: str,
+) -> str:
+    """Identifica de forma única el snapshot dentro del documento."""
+
+    raw_identifier = (
+        f"{document.source_sha256}|"
+        f"{block.ordinal}|"
+        f"{location_normalized}"
+    )
+    return short_sha256(raw_identifier)
+
+
+def build_incident_key(
+    country: str,
+    community_normalized: str | None,
+    province_normalized: str | None,
+    location_normalized: str,
+    incident_start_date: date | None,
+) -> str:
+    """Clave estable que no incluye estado, medios ni texto cambiante."""
+
+    raw_identifier = "|".join(
+        [
+            country,
+            community_normalized or "",
+            province_normalized or "",
+            location_normalized,
+            incident_start_date.isoformat() if incident_start_date else "",
+        ]
+    )
+    return short_sha256(raw_identifier)
+
+
+def build_chunk_text(
+    document: DocumentMetadata,
+    block: FireBlock,
+    location: str,
+    status: str | None,
+    operational_status: str | None,
+    resources: list[AssignedResource],
+    note: str | None,
+) -> str:
+    """Genera una representación autosuficiente para el futuro embedding."""
+
+    parts = [
+        f"Fecha del parte: {document.report_date.isoformat()}",
+        f"País: {block.country}",
+        (
+            f"Comunidad autónoma: {block.autonomous_community}"
+            if block.autonomous_community
+            else None
+        ),
+        f"Provincia: {block.province}" if block.province else None,
+        f"Localización: {location}",
+        f"Estado: {status}" if status else None,
+        (
+            f"Situación operativa: {operational_status}"
+            if operational_status
+            else None
+        ),
+        "Medios asignados:",
+        *[f"- {resource.raw_text}" for resource in resources],
+        f"Nota: {note}" if note else None,
+        f"Fuente: {document.source_file}, página {block.page_start}",
+    ]
+
+    return "\n".join(part for part in parts if part is not None)
+
+
+def build_fire_snapshot(
+    document: DocumentMetadata,
+    block: FireBlock,
+) -> FireSnapshot:
+    """Coordina los extractores y deja que Pydantic valide el resultado."""
+
+    location = extract_location(block)
+    location_normalized = normalize_text(location)
+
+    status, operational_status = extract_status(block)
+    note, incident_start_date = extract_note(block)
+    resources, resource_codes = extract_assigned_resources(block)
+
+    community_normalized = (
+        normalize_text(block.autonomous_community)
+        if block.autonomous_community
+        else None
+    )
+    province_normalized = (
+        normalize_text(block.province)
+        if block.province
+        else None
+    )
+
+    return FireSnapshot(
+        snapshot_id=build_snapshot_id(
+            document,
+            block,
+            location_normalized,
+        ),
+        incident_key=build_incident_key(
+            country=block.country,
+            community_normalized=community_normalized,
+            province_normalized=province_normalized,
+            location_normalized=location_normalized,
+            incident_start_date=incident_start_date,
+        ),
+        document_id=document.document_id,
+        country=block.country,
+        autonomous_community=block.autonomous_community,
+        autonomous_community_normalized=community_normalized,
+        province=block.province,
+        province_normalized=province_normalized,
+        location=location,
+        location_normalized=location_normalized,
+        status=status,
+        operational_status=operational_status,
+        note=note,
+        incident_start_date=incident_start_date,
+        assigned_resources=resources,
+        resource_codes=resource_codes,
+        report_date=document.report_date,
+        report_date_number=int(document.report_date.strftime("%Y%m%d")),
+        last_update=document.last_update,
+        page_start=block.page_start,
+        page_end=block.page_end,
+        source_file=document.source_file,
+        source_url=document.source_url,
+        source_sha256=document.source_sha256,
+        parser_version=PARSER_VERSION,
+        raw_text=block_text(block),
+        chunk_text=build_chunk_text(
+            document=document,
+            block=block,
+            location=location,
+            status=status,
+            operational_status=operational_status,
+            resources=resources,
+            note=note,
+        ),
+    )
+
 
 # ------------------
 # 

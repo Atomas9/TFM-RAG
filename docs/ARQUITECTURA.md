@@ -49,6 +49,21 @@ La unidad principal sera un snapshot: el estado de un incendio en una fecha de
 parte determinada. Un mismo incendio puede generar varios snapshots a lo largo
 de varios dias y no deben eliminarse como duplicados.
 
+Se distinguen dos niveles de identidad:
+
+- `snapshot_id` es unico para cada bloque dentro de un PDF y se deriva del hash
+  del documento, el ordinal y la localizacion normalizada;
+- `incident_key` es una agrupacion heuristica basada en pais, comunidad,
+  provincia, localizacion y fecha de inicio cuando esta disponible.
+
+Cuando falta la fecha de inicio, dos partes de la misma ubicacion comparten
+`incident_key`. Esto permite recuperar una posible serie temporal, pero tambien
+puede unir incendios diferentes ocurridos en el mismo lugar. En sentido
+contrario, si la fecha aparece en un parte y falta en otro, un mismo incendio
+puede quedar dividido. La identidad definitiva requerira una fase posterior de
+resolucion temporal que considere continuidad entre partes, estado y fechas
+explicitas. Por tanto, `incident_key` no se usara para eliminar snapshots.
+
 El parser mantendra como estado, al menos:
 
 - comunidad autonoma actual;
@@ -60,6 +75,7 @@ El parser mantendra como estado, al menos:
 
 - `snapshot_id`
 - `incident_key`
+- `document_id`
 - `country`
 - `autonomous_community`
 - `autonomous_community_normalized`
@@ -77,6 +93,9 @@ El parser mantendra como estado, al menos:
 - `source_file`
 - `source_url`
 - `source_sha256`
+- `parser_version`
+- `raw_text`
+- `chunk_text`
 
 ## Modos de recuperacion
 
@@ -94,4 +113,3 @@ un filtro exacto a Chroma.
 - Ejecucion local del parser, embeddings e indice.
 - Generacion remota opcional mediante Ollama Cloud.
 - Sin LangChain ni LlamaIndex durante la primera implementacion.
-

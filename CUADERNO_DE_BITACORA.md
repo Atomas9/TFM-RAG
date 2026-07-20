@@ -186,3 +186,62 @@ documentacion con el estado real de la fase 1.
 Crear pruebas automatizadas para los siete documentos. Despues se validaran
 notas y medios contra una muestra real, se construira el modelo final del
 incendio y se exportara el primer JSONL.
+
+## 2026-07-20
+
+### Objetivo
+
+Integrar los campos extraidos en el modelo final `FireSnapshot` y preparar el
+texto que se utilizara para generar embeddings.
+
+### Trabajo realizado
+
+- Se incorporo `PARSER_VERSION` para versionar la salida del parser.
+- Se incorporo el modelo Pydantic `FireSnapshot`.
+- Se implemento `short_sha256()` para identificadores deterministas.
+- Se implemento `build_snapshot_id()` para identificar cada observacion dentro
+  de su documento.
+- Se implemento `build_incident_key()` como agrupacion heuristica de posibles
+  observaciones del mismo incendio.
+- Se implemento `build_chunk_text()` con fecha, geografia, localizacion,
+  estado, medios, nota y fuente.
+- Se implemento `build_fire_snapshot()` para coordinar todos los extractores.
+- Se incorporo el parte del 19 de julio al corpus local.
+- Se actualizaron README, arquitectura, revision tecnica y pruebas previstas.
+
+### Decisiones
+
+- `snapshot_id` identifica una observacion concreta y nunca se reutiliza para
+  otro bloque.
+- `incident_key` es una clave heuristica y no una identidad confirmada.
+- Cuando falta la fecha de inicio, la clave agrupa por geografia y localizacion.
+- Los snapshots no se eliminaran como duplicados por compartir `incident_key`.
+- La resolucion definitiva de episodios se realizara posteriormente sobre el
+  corpus ordenado por fecha.
+
+### Validacion
+
+- Los 8 PDF producen 1073 lineas y 48 snapshots: 47 de Espana y uno de
+  Portugal.
+- Los 48 `snapshot_id` son unicos.
+- Se generan 37 `incident_key`; siete claves agrupan ubicaciones repetidas.
+- Los 48 snapshots contienen estado y `chunk_text` no vacio.
+- No hay rangos con `page_start` posterior a `page_end`.
+- Se extraen 29 notas, 4 fechas de inicio completas y 157 medios candidatos.
+- `python -m py_compile src/miteco_rag/parseo_y_chuncking.py`: correcto.
+
+### Problemas o riesgos
+
+- `incident_key` puede fusionar incendios distintos de una misma ubicacion si
+  ninguno incluye fecha de inicio.
+- Un mismo incendio puede dividirse si la fecha de inicio solo aparece en uno
+  de sus partes; el corpus actual muestra este caso en Villablino.
+- Los medios y notas aun deben contrastarse manualmente con los PDF.
+- La demostracion del modulo sigue ejecutandose durante los imports.
+- Todavia no existen pruebas pytest implementadas.
+
+### Siguiente paso
+
+Crear las pruebas del modelo e identificadores, proteger la demostracion con
+`if __name__ == "__main__"` e implementar la orquestacion del PDF y del
+directorio. Despues se podra validar y exportar el primer JSONL.
