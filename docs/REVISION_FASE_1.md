@@ -29,7 +29,9 @@ incluye:
 - construcción de un `FireSnapshot` validado por Pydantic;
 - generación determinista de `snapshot_id` e `incident_key`;
 - construcción de `raw_text` y `chunk_text` para cada snapshot;
-- versionado de la salida mediante `parser_version`.
+- versionado de la salida mediante `parser_version`;
+- orquestación completa de un PDF mediante `parse_miteco_pdf()`;
+- procesamiento determinista del corpus mediante `parse_pdf_directory()`.
 
 La estructura elegida es adecuada para esta fase: primero se delimitan los
 bloques y después cada función interpreta un campo concreto. Esto facilita
@@ -53,6 +55,10 @@ probar y corregir cada extractor de forma independiente.
   invertido.
 - Se obtienen 37 valores distintos de `incident_key`; siete claves agrupan
   observaciones repetidas de una misma ubicación.
+- `parse_pdf_directory()` devuelve los mismos 48 snapshots en ejecuciones
+  consecutivas y conserva los 8 documentos.
+- Una carpeta sin PDF genera `FileNotFoundError` con la ruta inspeccionada.
+- Un PDF inexistente genera `FileNotFoundError` antes de intentar abrirlo.
 
 ### Error detectado y corregido
 
@@ -170,7 +176,7 @@ El siguiente paso no debería ser ChromaDB todavía. Primero conviene:
 1. crear pruebas para los recuentos de los ocho PDF y para Portugal;
 2. inspeccionar manualmente una muestra de medios y notas;
 3. probar la estabilidad y las limitaciones conocidas de ambos identificadores;
-4. implementar la orquestación de un PDF y del directorio completo;
+4. implementar la validación agregada del corpus;
 5. exportar y validar un JSONL reproducible.
 
 Cuando esos pasos sean estables, cada registro del JSONL podrá convertirse en

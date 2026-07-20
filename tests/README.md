@@ -14,5 +14,9 @@ Las primeras pruebas automatizadas comprobaran:
 - la agrupacion heuristica de ubicaciones repetidas mediante `incident_key`;
 - el caso de Villablino, cuya fecha de inicio no aparece en todos los partes;
 - que `incident_key` no se utiliza para eliminar snapshots;
+- que `parse_miteco_pdf()` devuelve el recuento esperado de cada parte;
+- que `parse_pdf_directory()` conserva los 48 snapshots y un orden
+  determinista;
+- que una carpeta vacia y un PDF inexistente generan `FileNotFoundError`;
 - la insercion y consulta de embeddings propios en ChromaDB;
 - los filtros exactos por ubicacion, provincia, estado y fecha.

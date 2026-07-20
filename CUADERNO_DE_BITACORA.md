@@ -206,6 +206,10 @@ texto que se utilizara para generar embeddings.
 - Se implemento `build_chunk_text()` con fecha, geografia, localizacion,
   estado, medios, nota y fuente.
 - Se implemento `build_fire_snapshot()` para coordinar todos los extractores.
+- Se implemento `parse_miteco_pdf()` para orquestar todas las etapas de un
+  documento.
+- Se implemento `parse_pdf_directory()` para recorrer el corpus en orden
+  determinista sin deduplicar snapshots diarios.
 - Se incorporo el parte del 19 de julio al corpus local.
 - Se actualizaron README, arquitectura, revision tecnica y pruebas previstas.
 
@@ -229,6 +233,10 @@ texto que se utilizara para generar embeddings.
 - No hay rangos con `page_start` posterior a `page_end`.
 - Se extraen 29 notas, 4 fechas de inicio completas y 157 medios candidatos.
 - `python -m py_compile src/miteco_rag/parseo_y_chuncking.py`: correcto.
+- Dos ejecuciones de `parse_pdf_directory()` devuelven los mismos 48 snapshots
+  y conservan los 8 documentos.
+- Una carpeta vacia y un PDF inexistente generan `FileNotFoundError` con un
+  mensaje explicito.
 
 ### Problemas o riesgos
 
@@ -242,6 +250,6 @@ texto que se utilizara para generar embeddings.
 
 ### Siguiente paso
 
-Crear las pruebas del modelo e identificadores, proteger la demostracion con
-`if __name__ == "__main__"` e implementar la orquestacion del PDF y del
-directorio. Despues se podra validar y exportar el primer JSONL.
+Crear las pruebas del modelo, identificadores y orquestacion; proteger la
+demostracion con `if __name__ == "__main__"`; e implementar la validacion
+agregada. Despues se podra exportar el primer JSONL.

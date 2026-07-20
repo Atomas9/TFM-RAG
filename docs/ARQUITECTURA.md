@@ -71,6 +71,17 @@ El parser mantendra como estado, al menos:
 - numero de pagina;
 - incendio actualmente abierto.
 
+La orquestacion se divide en dos niveles:
+
+- `parse_miteco_pdf(pdf_path, source_url=None)` ejecuta extraccion, metadatos,
+  separacion de bloques y construccion de snapshots para un unico documento;
+- `parse_pdf_directory(input_dir)` ordena los PDF por ruta, procesa cada uno y
+  concatena sus snapshots sin deduplicarlos.
+
+El orden determinista permite repetir una ejecucion y comparar su salida. La
+deduplicacion por `incident_key` queda expresamente fuera de esta etapa porque
+un mismo incendio puede tener un snapshot diferente cada dia.
+
 ## Metadatos minimos
 
 - `snapshot_id`

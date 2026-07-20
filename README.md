@@ -39,6 +39,11 @@ pertenecer al mismo incendio: utiliza geografia, localizacion y fecha de inicio
 cuando esta existe. No debe interpretarse todavia como una identidad definitiva
 si MITECO no proporciona la fecha de inicio.
 
+La orquestacion de la fase ya esta disponible: `parse_miteco_pdf()` transforma
+un PDF en sus snapshots y `parse_pdf_directory()` procesa todos los PDF de una
+carpeta en orden determinista, sin deduplicar observaciones de dias distintos.
+Las rutas inexistentes o las carpetas sin PDF producen errores explicitos.
+
 ## Arquitectura prevista
 
 1. Descarga y almacenamiento inmutable de los PDF de MITECO.

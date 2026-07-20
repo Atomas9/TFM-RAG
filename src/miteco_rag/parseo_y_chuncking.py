@@ -830,6 +830,42 @@ def build_fire_snapshot(
         ),
     )
 
+def parse_miteco_pdf(
+    pdf_path: Path,
+    source_url: str | None = None,
+) -> list[FireSnapshot]:
+    """Ejecuta la fase completa sobre un único PDF."""
+
+    lines = extract_pdf_lines(pdf_path)
+    document = extract_document_metadata(
+        pdf_path,
+        lines,
+        source_url=source_url,
+    )
+    blocks = split_fire_blocks(lines)
+
+    return [
+        build_fire_snapshot(document, block)
+        for block in blocks
+    ]
+
+
+def parse_pdf_directory(input_dir: Path) -> list[FireSnapshot]:
+    """Parsea todos los PDF sin deduplicar snapshots de días distintos."""
+
+    pdf_files = sorted(input_dir.glob("*.pdf"))
+
+    if not pdf_files:
+        raise FileNotFoundError(
+            f"No se encontraron PDF en {input_dir.resolve()}"
+        )
+
+    snapshots: list[FireSnapshot] = []
+
+    for pdf_path in pdf_files:
+        snapshots.extend(parse_miteco_pdf(pdf_path))
+
+    return snapshots
 
 # ------------------
 # 
