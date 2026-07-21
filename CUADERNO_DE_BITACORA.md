@@ -271,3 +271,70 @@ Continuar con la generacion de embeddings normalizados de `chunk_text` mediante
 `BAAI/bge-m3` y almacenar vectores, documentos y metadatos planos en una
 coleccion persistente de ChromaDB. La primera version reconstruira por completo
 el indice.
+
+## 2026-07-21
+
+### Objetivo
+
+Crear y validar la primera version minima del indice vectorial a partir de los
+snapshots de la fase 1.
+
+### Trabajo realizado
+
+- Se creo `src/miteco_rag/embeddings_chroma.py`.
+- Se implemento la lectura linea a linea de `fire_snapshots.jsonl` y la
+  reconstruccion de cada registro como `FireSnapshot`.
+- Se definio la conversion a metadatos planos compatibles con ChromaDB.
+- Se genero un embedding normalizado de cada `chunk_text` mediante
+  `BAAI/bge-m3`, Sentence Transformers, CPU y lotes de ocho.
+- Se creo la coleccion persistente `MITECO_fire_snapshots` en `data/chroma`.
+- Se almacenaron mediante `upsert` los IDs, embeddings, documentos y
+  metadatos.
+- Se mantuvo el snapshot de Portugal en la coleccion y se conservo `country`
+  para poder filtrarlo en las consultas.
+- Se renombro la utilidad de inspeccion a `chroma_tests.py` para evitar una
+  colision de nombre con Chroma.
+- Se actualizaron README, arquitectura, apuntes de librerias, pruebas previstas
+  y la revision tecnica de esta fase.
+
+### Decisiones
+
+- La primera version prioriza un flujo pequeno y academico, sin LangChain ni
+  LlamaIndex.
+- El proyecto calcula los embeddings y Chroma se abre con
+  `embedding_function=None`.
+- `snapshot_id` es el ID del registro, `chunk_text` es el documento y los
+  restantes campos consultables se guardan como metadatos.
+- Se incluyen los 48 snapshots, tambien el de Portugal; las consultas
+  restringidas a Espana usaran `country = "ES"`.
+- La recuperacion y la generacion con Ollama quedan para la siguiente jornada.
+
+### Validacion
+
+- `pip check`: sin dependencias rotas en el entorno `RAG-TFM`.
+- Los archivos del parser, el indexador y la utilidad de inspeccion compilan.
+- El JSONL contiene 48 snapshots validos y con IDs unicos.
+- Chroma contiene 48 registros: 47 de Espana y uno de Portugal.
+- Los IDs y documentos almacenados coinciden con el JSONL.
+- Cada vector tiene 1.024 dimensiones y norma unitaria.
+- Los metadatos insertados no contienen valores `None`.
+- Los datos procesados y el indice de Chroma siguen excluidos de Git.
+
+### Problemas o riesgos
+
+- La CLI `chroma browse` detecta la coleccion, pero falla al mostrar sus filas;
+  la API de Python si las consulta correctamente.
+- `upsert` inserta o actualiza, pero no elimina IDs obsoletos que hayan
+  desaparecido del JSONL.
+- La coleccion no guarda todavia la version del modelo ni del indice como
+  metadatos propios.
+- `chroma_tests.py` es una comprobacion manual y depende de ejecutarse desde la
+  raiz del repositorio.
+- Siguen pendientes las pruebas pytest.
+
+### Siguiente paso
+
+Implementar primero una consulta semantica sencilla con el mismo BGE-M3 y,
+despues, filtros exactos de metadatos y consultas combinadas. La integracion con
+Ollama se realizara cuando la recuperacion devuelva resultados pertinentes y
+trazables.

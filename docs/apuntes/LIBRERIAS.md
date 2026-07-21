@@ -494,16 +494,17 @@ Convierte textos completos en vectores semánticos comparables.
 ```python
 from sentence_transformers import SentenceTransformer
 
-model = SentenceTransformer("BAAI/bge-m3")
+model = SentenceTransformer("BAAI/bge-m3", device="cpu")
 embeddings = model.encode(
     texts,
-    batch_size=16,
+    batch_size=8,
     normalize_embeddings=True,
     show_progress_bar=True,
 )
 ```
 
-- `SentenceTransformer(model_id)`: carga el modelo.
+- `SentenceTransformer(model_id, device="cpu")`: carga el modelo y fuerza su
+  ejecucion en CPU, como hace el script actual.
 - `.encode(texts)`: genera un vector por texto.
 - `batch_size`: número de textos procesados juntos.
 - `normalize_embeddings=True`: normaliza los vectores; debe ser coherente entre
@@ -526,10 +527,13 @@ metadatos del incendio.
 import chromadb
 
 client = chromadb.PersistentClient(path="data/chroma")
-collection = client.get_or_create_collection("miteco_fires")
+collection = client.get_or_create_collection(
+    name="MITECO_fire_snapshots",
+    embedding_function=None,
+)
 
-collection.add(
-    ids=["incendio-001"],
+collection.upsert(
+    ids=[snapshot.snapshot_id],
     documents=[chunk_text],
     embeddings=[embedding.tolist()],
     metadatas=[{
@@ -551,13 +555,17 @@ results = collection.query(
 
 - `PersistentClient(path=...)`: guarda la colección en disco.
 - `get_or_create_collection(name)`: obtiene o crea una colección.
-- `.add(...)`: inserta registros.
+- `embedding_function=None`: indica que el proyecto proporciona sus propios
+  vectores.
+- `.upsert(...)`: inserta un ID nuevo o actualiza uno existente.
 - `.query(...)`: recupera los más próximos al vector consultado.
 - `where={...}`: aplica filtros sobre metadatos.
 
 Como calcularemos los embeddings nosotros, siempre entregaremos explícitamente
 `embeddings` y `query_embeddings`. Los nombres y tipos de los metadatos deben
 ser consistentes; por ejemplo, no mezclar `province`, `provincia` y `Provincia`.
+`upsert()` no elimina los registros antiguos que ya no estén presentes en la
+nueva entrada; esa sincronización debe programarse por separado.
 
 Documentación oficial: [Chroma](https://docs.trychroma.com/docs/overview/introduction).
 
@@ -667,15 +675,17 @@ Documentación oficial: [nbformat](https://nbformat.readthedocs.io/en/latest/).
 
 ## 11. Qué conviene aprender primero
 
-Para continuar ahora con `parseo_y_chuncking.py`, el orden más útil es:
+Una vez completado el primer parser y el primer índice, el orden más útil es:
 
 1. `Path` y recorrido de archivos.
 2. `pymupdf.open()`, `Document`, `Page` y `Page.get_text()`.
 3. Modelos Pydantic derivados de `BaseModel`.
 4. Listas, bucles y `enumerate()`.
 5. Expresiones regulares con `compile()`, `search()` y `group()`.
-6. Funciones pequeñas y pruebas con pytest.
+6. `SentenceTransformer.encode()` y normalización de vectores.
+7. `PersistentClient`, colecciones, `upsert()`, `get()` y `query()` de Chroma.
+8. Funciones pequeñas y pruebas con pytest.
 
-Chroma, embeddings y Ollama pueden esperar hasta que la salida del parser sea
-estable: primero necesitamos separar correctamente cada incendio y producir
-metadatos fiables.
+El siguiente aprendizaje práctico es generar el embedding de una pregunta y
+usar `collection.query()` con y sin `where`. Ollama puede esperar hasta haber
+comprobado que el recuperador devuelve snapshots pertinentes y trazables.

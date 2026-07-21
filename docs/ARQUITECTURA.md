@@ -98,6 +98,36 @@ deliberado mientras el corpus sea pequeno y el esquema siga evolucionando. Una
 futura ingesta incremental comparara `source_sha256` y `parser_version` antes de
 decidir que documentos deben reprocesarse.
 
+## Indexacion vectorial implementada
+
+`src/miteco_rag/embeddings_chroma.py` realiza el primer indice denso del
+proyecto:
+
+1. lee `data/processed/fire_snapshots.jsonl` linea a linea;
+2. reconstruye y valida cada linea como `FireSnapshot` con Pydantic;
+3. usa `chunk_text` como unidad de embedding y como documento recuperable;
+4. genera los vectores con `BAAI/bge-m3`, CPU, lotes de ocho y normalizacion;
+5. convierte los metadatos a tipos planos admitidos por Chroma y omite los
+   valores `None`;
+6. abre una base persistente en `data/chroma`;
+7. inserta o actualiza la coleccion `MITECO_fire_snapshots` mediante
+   `snapshot_id`.
+
+El indice actual incluye los 48 snapshots del JSONL: 47 de Espana y uno de
+Portugal. Esta inclusion es deliberada; `country` permite aplicar un filtro
+posterior cuando una consulta deba limitarse a Espana.
+
+Chroma se configura con `embedding_function=None` porque los vectores se
+calculan fuera de la base de datos. Las consultas semanticas deberan usar el
+mismo modelo y la misma normalizacion. Los vectores comprobados tienen 1.024
+dimensiones y norma unitaria.
+
+La escritura actual usa `get_or_create_collection()` y `upsert()`. Esto hace
+repetible la indexacion de los mismos snapshots, pero no constituye una
+sincronizacion completa: si un ID desaparece del JSONL, su registro anterior no
+se borra de Chroma. Antes de automatizar la ingesta habra que elegir entre
+recrear la coleccion o eliminar expresamente los IDs obsoletos.
+
 ## Metadatos minimos
 
 - `snapshot_id`
@@ -133,6 +163,10 @@ decidir que documentos deben reprocesarse.
 Las ubicaciones se normalizaran antes de almacenarlas y consultarlas. Las
 variantes o errores tipograficos se resolveran en la aplicacion antes de enviar
 un filtro exacto a Chroma.
+
+Estos tres modos pertenecen al siguiente incremento. La fase implementada
+termina en la persistencia del indice; todavia no hay un componente de consulta
+ni una llamada al LLM.
 
 ## Limites iniciales
 

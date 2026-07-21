@@ -25,4 +25,15 @@ Las primeras pruebas automatizadas comprobaran:
   coherente;
 - que fechas, tildes y modelos anidados sobreviven a la serializacion JSON;
 - la insercion y consulta de embeddings propios en ChromaDB;
-- los filtros exactos por ubicacion, provincia, estado y fecha.
+- que los IDs y documentos de Chroma coinciden con los del JSONL;
+- que BGE-M3 genera un vector normalizado de 1.024 dimensiones por snapshot;
+- que la conversion de metadatos elimina los valores `None` y conserva sus
+  tipos simples;
+- que una segunda ejecucion con los mismos snapshots no duplica registros;
+- los filtros exactos por pais, ubicacion, provincia, estado y fecha;
+- una consulta semantica y otra combinada con filtros.
+
+Durante la revision manual del 21 de julio se comprobaron los primeros cuatro
+aspectos sobre los 48 registros actuales. Siguen pendientes de convertirse en
+pruebas pytest para no depender del corpus local ni de volver a descargar el
+modelo en cada ejecucion.

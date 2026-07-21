@@ -17,7 +17,13 @@ maquina de estados geografica y la separacion por incendios. Tambien se han
 anadido extractores de localizacion, estado, situacion operativa, notas, fecha
 de inicio y medios asignados. Estos datos ya se integran en un `FireSnapshot`
 validado por Pydantic, con identificadores reproducibles, texto original y un
-`chunk_text` autosuficiente preparado para la futura generación de embeddings.
+`chunk_text` autosuficiente.
+
+La primera version del indice vectorial tambien esta implementada en
+`src/miteco_rag/embeddings_chroma.py`. El script carga y valida el JSONL,
+genera embeddings normalizados con `BAAI/bge-m3` y almacena cada
+`snapshot_id`, `chunk_text`, vector y conjunto plano de metadatos en la
+coleccion persistente `MITECO_fire_snapshots` de ChromaDB.
 
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
@@ -31,7 +37,9 @@ forma parte del codigo principal.
 
 El corpus local de trabajo contiene actualmente ocho partes. La maquina de
 estados delimita 48 bloques `Localizacion:`: 47 de Espana y uno de Portugal.
-Los PDF y los resultados generados continuan fuera del control de versiones.
+Por decision del proyecto, el indice actual conserva los 48 registros,
+incluido el de Portugal. Los PDF, los resultados procesados y el indice local
+continuan fuera del control de versiones.
 
 `snapshot_id` identifica de forma unica una observacion dentro de un parte.
 `incident_key` es una clave heuristica para agrupar observaciones que podrian
@@ -112,12 +120,35 @@ La implementacion actual vuelve a procesar todos los PDF y reemplaza los dos
 artefactos de `data/processed`. Tanto los PDF como las salidas procesadas estan
 excluidos de Git porque son datos regenerables.
 
+## Generar el indice vectorial
+
+Con el entorno `RAG-TFM` activado y el JSONL ya generado:
+
+```bash
+python src/miteco_rag/embeddings_chroma.py
+```
+
+La ejecucion utiliza CPU y procesa los textos en lotes de ocho. La primera
+carga del modelo puede tardar porque Sentence Transformers debe descargarlo o
+recuperarlo de su cache. El script emplea `upsert`: actualiza los IDs que ya
+existen e inserta los nuevos, pero no elimina automaticamente posibles IDs
+obsoletos que hayan desaparecido del JSONL.
+
+Para inspeccionar tres registros sin generar de nuevo los embeddings:
+
+```bash
+python src/miteco_rag/chroma_tests.py
+```
+
+Esta utilidad debe ejecutarse desde la raiz del repositorio porque su ruta a
+`data/chroma` es relativa al directorio de trabajo.
+
 ## Siguiente fase
 
-La proxima fase generara embeddings de `chunk_text` con `BAAI/bge-m3` y
-almacenara cada vector, documento y conjunto plano de metadatos en ChromaDB. La
-primera version reconstruira completamente la coleccion para evitar registros
-obsoletos; la indexacion incremental se abordara cuando el formato sea estable.
+La proxima fase implementara la consulta: generara el embedding de una pregunta
+con el mismo modelo, permitira combinar similitud semantica con filtros de
+metadatos de Chroma y devolvera las fuentes recuperadas. La generacion de la
+respuesta con Ollama se incorporara despues de validar esa recuperacion.
 
 ## Alcance inicial
 
@@ -139,6 +170,9 @@ La solucion comentada de la primera fase puede estudiarse y ejecutarse desde
 
 La ultima revision del codigo desarrollado esta en
 [docs/REVISION_FASE_1.md](docs/REVISION_FASE_1.md).
+
+La revision del indice vectorial esta en
+[docs/REVISION_EMBEDDINGS_CHROMA.md](docs/REVISION_EMBEDDINGS_CHROMA.md).
 
 Los apuntes sobre el propósito y el uso de cada dependencia están en
 [docs/apuntes/LIBRERIAS.md](docs/apuntes/LIBRERIAS.md).
