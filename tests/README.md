@@ -1,6 +1,6 @@
 # Pruebas
 
-Las primeras pruebas automatizadas comprobaran:
+Las pruebas previstas para el parser de PDF comprobaran:
 
 - los recuentos actuales de 9, 9, 10, 6, 5, 4, 3 y 2 incendios en los ocho PDF
   de referencia, con 48 snapshots en total;
@@ -33,7 +33,34 @@ Las primeras pruebas automatizadas comprobaran:
 - los filtros exactos por pais, ubicacion, provincia, estado y fecha;
 - una consulta semantica y otra combinada con filtros.
 
-Durante la revision manual del 21 de julio se comprobaron los primeros cuatro
-aspectos sobre los 48 registros actuales. Siguen pendientes de convertirse en
-pruebas pytest para no depender del corpus local ni de volver a descargar el
-modelo en cada ejecucion.
+## Pruebas implementadas
+
+`test_query_filters.py` cubre el analizador sin depender del corpus local:
+
+- inclusiones y exclusiones de provincias;
+- `no de Leon sino de Palencia`;
+- listas con `y` y `o` traducidas a `$in` o `$nin`;
+- prioridad de `Castilla y Leon` frente a la provincia de Leon;
+- reconocimiento de provincias validas ausentes del corpus, como Huelva;
+- localizaciones dinamicas con articulo invertido;
+- desambiguacion de provincia y comunidad de Madrid;
+- paises, estados y situaciones operativas;
+- fechas exactas, intervalos y comparaciones estrictas;
+- contradicciones y consultas sin filtros.
+
+`test_retrieval_chroma.py` usa dobles del modelo y de la coleccion para probar:
+
+- el embedding normalizado enviado a Chroma;
+- la presencia opcional de `where`;
+- la devolucion auditable de `ParsedQuery` y del filtro final;
+- el bloqueo de una consulta contradictoria antes de buscar.
+
+La suite actual contiene 22 pruebas y se ejecuta con:
+
+```bash
+python -m pytest -q
+```
+
+Las pruebas del parser de PDF y una evaluacion de relevancia con preguntas y
+resultados esperados siguen pendientes. Estas ultimas deberan separar calidad
+semantica, exactitud de filtros y comportamiento cuando no existe respuesta.

@@ -160,13 +160,58 @@ recrear la coleccion o eliminar expresamente los IDs obsoletos.
 2. Semantica: `collection.query(query_embeddings=...)`.
 3. Combinada: embedding de la pregunta junto con `where`.
 
-Las ubicaciones se normalizaran antes de almacenarlas y consultarlas. Las
-variantes o errores tipograficos se resolveran en la aplicacion antes de enviar
-un filtro exacto a Chroma.
+Las ubicaciones se normalizan antes de almacenarlas y consultarlas. Las
+variantes o errores tipograficos deben resolverse en la aplicacion antes de
+enviar un filtro exacto a Chroma.
 
-Estos tres modos pertenecen al siguiente incremento. La fase implementada
-termina en la persistencia del indice; todavia no hay un componente de consulta
-ni una llamada al LLM.
+## Retrieval implementado
+
+La consulta se divide en dos modulos:
+
+- `query_filters.py` interpreta la pregunta sin abrir Chroma ni cargar el
+  modelo;
+- `retrieval_chroma.py` genera el embedding y ejecuta `collection.query()` con
+  el `where` construido.
+
+El analizador produce primero un `ParsedQuery` que conserva:
+
+- pregunta original y consulta semantica;
+- valores incluidos y excluidos por campo;
+- intervalo de fechas del parte;
+- contradicciones o ambiguedades detectadas.
+
+`build_chroma_where()` realiza despues una traduccion independiente a `$and`,
+`$in`, `$nin`, `$ne`, `$gte` y `$lte`. Esta separacion permite probar si un
+error procede de la interpretacion linguistica o de la condicion enviada a la
+base de datos.
+
+Los campos soportados son:
+
+- `country`;
+- `autonomous_community_normalized`;
+- `province_normalized`;
+- `location_normalized`;
+- `status`;
+- `operational_status`;
+- `report_date_number`.
+
+Los catalogos completos de comunidades y provincias permiten reconocer una
+provincia aunque no tenga incendios en el corpus actual. En ese caso Chroma
+devuelve cero registros. Las localizaciones son dinamicas y se construyen con
+los metadatos existentes, porque cada parte puede introducir nombres nuevos.
+
+El orden de prioridad evita interpretar `Leon` dentro de `Castilla y Leon` y
+resuelve expresiones como `no de Leon sino de Palencia`. Las contradicciones no
+se ejecutan: se devuelve un error explicito para solicitar una aclaracion.
+
+La funcion de bajo nivel `retrieve()` admite un `where` manual. La funcion
+`retrieve_with_filters()` construye el catalogo, interpreta la pregunta,
+comprueba ambiguedades y devuelve resultados, interpretacion y filtro final.
+
+Todavia no existe un planificador que elija entre `get()` y `query()`: la ruta
+automatica actual siempre hace ranking vectorial dentro de los registros que
+cumplen el filtro. Tampoco se ha incorporado busqueda lexica ni generacion con
+el LLM.
 
 ## Limites iniciales
 

@@ -25,6 +25,13 @@ genera embeddings normalizados con `BAAI/bge-m3` y almacena cada
 `snapshot_id`, `chunk_text`, vector y conjunto plano de metadatos en la
 coleccion persistente `MITECO_fire_snapshots` de ChromaDB.
 
+La recuperacion semantica e hibrida se encuentra en
+`src/miteco_rag/retrieval_chroma.py`. El analizador determinista de
+`src/miteco_rag/query_filters.py` reconoce filtros incluidos y excluidos de
+pais, comunidad, provincia, localizacion, estado, situacion operativa y fecha
+del parte. La interpretacion y el `where` final se devuelven junto a los
+resultados para que la consulta sea auditable.
+
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
 ocho PDF sin errores. La delimitacion de bloques, la construcción de snapshots
@@ -143,12 +150,44 @@ python src/miteco_rag/chroma_tests.py
 Esta utilidad debe ejecutarse desde la raiz del repositorio porque su ruta a
 `data/chroma` es relativa al directorio de trabajo.
 
+## Consultar el indice
+
+La demostracion incluida ejecuta una consulta semantica combinada con los
+filtros detectados:
+
+```bash
+python src/miteco_rag/retrieval_chroma.py
+```
+
+Desde Python, con `src` incluido en `PYTHONPATH`:
+
+```python
+from miteco_rag.retrieval_chroma import retrieve_with_filters
+
+results, parsed_query, where = retrieve_with_filters(
+    "Incendios activos en Leon",
+    top_k=5,
+)
+```
+
+`parse_metadata_filters()` separa la interpretacion del lenguaje natural y
+`build_chroma_where()` genera la condicion de Chroma. Se soportan inclusiones,
+exclusiones, listas, contrastes como `no de Leon sino de Palencia`, fechas
+exactas y rangos. Las comunidades y provincias proceden de catalogos
+controlados; las localizaciones se obtienen de los metadatos de la coleccion.
+
+Las pruebas del analizador y de su integracion se ejecutan sin cargar el modelo:
+
+```bash
+python -m pytest -q
+```
+
 ## Siguiente fase
 
-La proxima fase implementara la consulta: generara el embedding de una pregunta
-con el mismo modelo, permitira combinar similitud semantica con filtros de
-metadatos de Chroma y devolvera las fuentes recuperadas. La generacion de la
-respuesta con Ollama se incorporara despues de validar esa recuperacion.
+La proxima fase evaluara la calidad del retrieval con un conjunto de preguntas
+y resultados esperados. Despues se incorporara recuperacion lexica y se
+decidira como fusionarla con los embeddings. La generacion de respuestas con
+Ollama se abordara cuando la recuperacion sea suficientemente fiable.
 
 ## Alcance inicial
 
@@ -173,6 +212,9 @@ La ultima revision del codigo desarrollado esta en
 
 La revision del indice vectorial esta en
 [docs/REVISION_EMBEDDINGS_CHROMA.md](docs/REVISION_EMBEDDINGS_CHROMA.md).
+
+La revision del retrieval hibrido esta en
+[docs/REVISION_RETRIEVAL.md](docs/REVISION_RETRIEVAL.md).
 
 Los apuntes sobre el propósito y el uso de cada dependencia están en
 [docs/apuntes/LIBRERIAS.md](docs/apuntes/LIBRERIAS.md).

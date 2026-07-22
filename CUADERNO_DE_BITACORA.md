@@ -338,3 +338,79 @@ Implementar primero una consulta semantica sencilla con el mismo BGE-M3 y,
 despues, filtros exactos de metadatos y consultas combinadas. La integracion con
 Ollama se realizara cuando la recuperacion devuelva resultados pertinentes y
 trazables.
+
+## 2026-07-22
+
+### Objetivo
+
+Implementar una primera recuperacion hibrida que combine embeddings BGE-M3 con
+filtros de metadatos interpretados de forma determinista.
+
+### Trabajo realizado
+
+- Se creo `src/miteco_rag/query_filters.py`.
+- Se definieron `MetadataCatalog`, `MetadataFilters` y `ParsedQuery` como
+  modelos Pydantic auditables.
+- Se implemento la construccion del catalogo a partir de metadatos reales de
+  Chroma.
+- Se incorporaron catalogos completos de comunidades y provincias para
+  reconocer lugares aunque no tengan registros en el corpus.
+- Se mantuvieron las localizaciones como catalogo dinamico.
+- Se implementaron inclusiones, exclusiones, coordinaciones y el contraste
+  `no X sino Y`.
+- Se implemento la prioridad de entidades compuestas, como `Castilla y Leon`,
+  y la distincion entre provincia y comunidad de Madrid.
+- Se incorporaron estados, situaciones operativas y fechas del parte exactas,
+  por intervalos y mediante comparaciones.
+- Se implemento `build_chroma_where()` con operadores de igualdad, inclusion,
+  exclusion, conjuncion y rango.
+- Se rehizo `retrieval_chroma.py` para aceptar un `where` manual y ofrecer
+  `retrieve_with_filters()` como recuperacion hibrida auditable.
+- Se elimino la consulta automatica durante la importacion mediante `main()`.
+- Se crearon pruebas unitarias puras y pruebas de integracion con dobles.
+- Se actualizaron README, arquitectura, pruebas y revision tecnica.
+
+### Decisiones
+
+- La interpretacion de la pregunta y la sintaxis de Chroma permanecen en
+  funciones separadas.
+- Las consultas ambiguas o contradictorias se detienen en lugar de elegir una
+  interpretacion arbitraria.
+- Las provincias ausentes, como Huelva o Palencia, producen un filtro valido y
+  cero resultados; no se sustituyen por vecinos semanticos irrelevantes.
+- La primera version es determinista y explicable. Un LLM para interpretar
+  filtros solo se considerara posteriormente como alternativa experimental.
+- Las fechas consultables son por ahora las fechas de los partes.
+
+### Validacion
+
+- `python -m pytest -q`: 22 pruebas superadas.
+- `query_filters.py` y `retrieval_chroma.py` compilan correctamente.
+- La consulta hibrida de incendios activos en Leon devuelve cinco snapshots de
+  esa provincia y elimina el anterior falso positivo de Lugo.
+- La exclusion de Leon devuelve 15 incendios activos de otras provincias.
+- Palencia y Huelva se reconocen como provincias y devuelven cero registros.
+- Castilla y Leon devuelve 9 snapshots de la comunidad.
+- La exclusion de Espana devuelve el unico snapshot de Portugal.
+- El intervalo del 12 al 15 de julio devuelve 30 snapshots dentro del rango.
+- La situacion operativa 2 en Aragon devuelve 6 snapshots que cumplen ambos
+  filtros.
+- `git diff --check`: sin errores de formato.
+
+### Problemas o riesgos
+
+- El lenguaje determinista no pretende comprender cualquier construccion del
+  espanol; solo las reglas documentadas y probadas.
+- Las localizaciones que aun no existen en Chroma no pueden detectarse como
+  filtros exactos.
+- Todavia no hay evaluacion de relevancia ni umbral para rechazar vecinos
+  semanticos debiles.
+- No se ha implementado busqueda lexica ni fusion de rankings.
+- La ruta automatica sigue usando similitud vectorial incluso para preguntas
+  puramente estructuradas.
+
+### Siguiente paso
+
+Crear un conjunto de evaluacion con preguntas y respuestas esperadas. Medir por
+separado la exactitud de filtros y la calidad del ranking semantico antes de
+implementar recuperacion lexica y, posteriormente, generacion con Ollama.
