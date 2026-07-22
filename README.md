@@ -25,12 +25,12 @@ genera embeddings normalizados con `BAAI/bge-m3` y almacena cada
 `snapshot_id`, `chunk_text`, vector y conjunto plano de metadatos en la
 coleccion persistente `MITECO_fire_snapshots` de ChromaDB.
 
-La recuperacion semantica e hibrida se encuentra en
-`src/miteco_rag/retrieval_chroma.py`. El analizador determinista de
-`src/miteco_rag/query_filters.py` reconoce filtros incluidos y excluidos de
-pais, comunidad, provincia, localizacion, estado, situacion operativa y fecha
-del parte. La interpretacion y el `where` final se devuelven junto a los
-resultados para que la consulta sea auditable.
+La implementacion del alumno continua en `src/miteco_rag/retrieval_chroma.py`.
+La solucion de referencia para la recuperacion semantica e hibrida se conserva
+por separado en `src/miteco_rag/retrieval_chroma_solution.py`. El analizador
+determinista de `src/miteco_rag/query_filters.py` reconoce filtros incluidos y
+excluidos de pais, comunidad, provincia, localizacion, estado, situacion
+operativa y fecha del parte.
 
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
@@ -156,13 +156,13 @@ La demostracion incluida ejecuta una consulta semantica combinada con los
 filtros detectados:
 
 ```bash
-python src/miteco_rag/retrieval_chroma.py
+python src/miteco_rag/retrieval_chroma_solution.py
 ```
 
 Desde Python, con `src` incluido en `PYTHONPATH`:
 
 ```python
-from miteco_rag.retrieval_chroma import retrieve_with_filters
+from miteco_rag.retrieval_chroma_solution import retrieve_with_filters
 
 results, parsed_query, where = retrieve_with_filters(
     "Incendios activos en Leon",
@@ -175,6 +175,8 @@ results, parsed_query, where = retrieve_with_filters(
 exclusiones, listas, contrastes como `no de Leon sino de Palencia`, fechas
 exactas y rangos. Las comunidades y provincias proceden de catalogos
 controlados; las localizaciones se obtienen de los metadatos de la coleccion.
+La funcion de conveniencia `metadata_query(question, catalog)` unifica ambos
+pasos y devuelve directamente el valor que debe recibir `where`.
 
 Las pruebas del analizador y de su integracion se ejecutan sin cargar el modelo:
 

@@ -364,9 +364,15 @@ filtros de metadatos interpretados de forma determinista.
   por intervalos y mediante comparaciones.
 - Se implemento `build_chroma_where()` con operadores de igualdad, inclusion,
   exclusion, conjuncion y rango.
-- Se rehizo `retrieval_chroma.py` para aceptar un `where` manual y ofrecer
-  `retrieve_with_filters()` como recuperacion hibrida auditable.
-- Se elimino la consulta automatica durante la importacion mediante `main()`.
+- Se anadio `metadata_query(question, catalog)` como interfaz unificada que
+  devuelve directamente el valor de `where`.
+- Se creo `retrieval_chroma_solution.py` como referencia para aceptar un
+  `where` manual y ofrecer `retrieve_with_filters()` como recuperacion hibrida
+  auditable.
+- Se conservo `retrieval_chroma.py` con la version desarrollada por el alumno
+  antes de esta solucion.
+- En la solucion de referencia se elimino la consulta automatica durante la
+  importacion mediante `main()`.
 - Se crearon pruebas unitarias puras y pruebas de integracion con dobles.
 - Se actualizaron README, arquitectura, pruebas y revision tecnica.
 
@@ -384,8 +390,9 @@ filtros de metadatos interpretados de forma determinista.
 
 ### Validacion
 
-- `python -m pytest -q`: 22 pruebas superadas.
-- `query_filters.py` y `retrieval_chroma.py` compilan correctamente.
+- `python -m pytest -q`: 25 pruebas superadas.
+- `query_filters.py`, `retrieval_chroma.py` y
+  `retrieval_chroma_solution.py` compilan correctamente.
 - La consulta hibrida de incendios activos en Leon devuelve cinco snapshots de
   esa provincia y elimina el anterior falso positivo de Lugo.
 - La exclusion de Leon devuelve 15 incendios activos de otras provincias.

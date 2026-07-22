@@ -200,7 +200,9 @@ class MetadataCatalog(BaseModel):
     locations: dict[str, str] = Field(default_factory=dict)
     statuses: dict[str, str] = Field(default_factory=dict)
     operational_statuses: dict[str, str] = Field(default_factory=dict)
+    report_dates: list[int] = Field(default_factory=list)
     report_years: list[int] = Field(default_factory=list)
+    latest_report_date: int | None = None
 
     @classmethod
     def from_metadatas(
@@ -215,6 +217,7 @@ class MetadataCatalog(BaseModel):
         locations: dict[str, str] = {}
         statuses: dict[str, str] = dict(STATUS_ALIASES)
         operational_statuses: dict[str, str] = {}
+        report_dates: set[int] = set()
         report_years: set[int] = set()
 
         metadata_rows = list(metadatas)
@@ -254,6 +257,7 @@ class MetadataCatalog(BaseModel):
 
             report_date_number = metadata.get("report_date_number")
             if isinstance(report_date_number, int):
+                report_dates.add(report_date_number)
                 report_years.add(report_date_number // 10_000)
 
         for alias, canonical in COMMUNITY_ALIASES.items():
@@ -267,6 +271,8 @@ class MetadataCatalog(BaseModel):
             if canonical in existing_statuses:
                 statuses[alias] = canonical
 
+        sorted_report_dates = sorted(report_dates)
+
         return cls(
             countries=countries,
             communities=communities,
@@ -274,7 +280,11 @@ class MetadataCatalog(BaseModel):
             locations=locations,
             statuses=statuses,
             operational_statuses=operational_statuses,
+            report_dates=sorted_report_dates,
             report_years=sorted(report_years),
+            latest_report_date=(
+                sorted_report_dates[-1] if sorted_report_dates else None
+            ),
         )
 
 
@@ -376,6 +386,23 @@ ISO_DATE_PATTERN = re.compile(
     r"\b(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})\b"
 )
 
+MONTH_DATE_PATTERN = re.compile(
+    rf"\b(?P<month>{MONTH_PATTERN})(?:\s+de\s+(?P<year>\d{{4}}))?\b"
+)
+
+YEAR_DATE_PATTERN = re.compile(
+    r"\b(?:en|durante|de|del\s+ano)\s+(?P<year>\d{4})\b"
+)
+
+HISTORICAL_ACTIVE_PATTERN = re.compile(
+    r"(?:"
+    r"\balguna\s+vez\b"
+    r"|\bhistoric[oa]s?\b"
+    r"|\b(?:estuvo|estuvieron|estaba|estaban|ha\s+estado|han\s+estado)\s+"
+    r"activ[oa]s?\b"
+    r")"
+)
+
 
 def normalize_query_text(text: str) -> str:
     """Normaliza tildes, mayusculas y espacios sin reordenar la frase."""
@@ -428,6 +455,12 @@ def parse_metadata_filters(
         previous_excluded = excluded
 
     _extract_report_dates(
+        normalized_query,
+        catalog,
+        filters,
+        ambiguities,
+    )
+    _apply_latest_report_to_current_active_query(
         normalized_query,
         catalog,
         filters,
@@ -526,6 +559,39 @@ def build_chroma_where(filters: MetadataFilters) -> dict[str, object] | None:
     if len(conditions) == 1:
         return conditions[0]
     return {"$and": conditions}
+
+
+def metadata_query(
+    question: str,
+    catalog: MetadataCatalog,
+) -> dict[str, object] | None:
+    """Convierte una pregunta directamente en un ``where`` de Chroma.
+
+    Esta es la interfaz sencilla para el codigo de retrieval. Internamente
+    interpreta la pregunta, detiene las consultas ambiguas y traduce los
+    filtros detectados a la sintaxis de Chroma.
+
+    Args:
+        question: Pregunta original escrita por el usuario.
+        catalog: Valores geograficos, estados y anos disponibles para
+            interpretar la pregunta.
+
+    Returns:
+        Un diccionario compatible con ``collection.query(where=...)`` o
+        ``None`` cuando la pregunta no contiene filtros reconocibles.
+
+    Raises:
+        ValueError: Si la pregunta esta vacia o contiene una interpretacion
+            contradictoria o ambigua.
+    """
+
+    parsed_query = parse_metadata_filters(question, catalog)
+
+    if parsed_query.ambiguities:
+        details = " ".join(parsed_query.ambiguities)
+        raise ValueError(f"Consulta ambigua: {details}")
+
+    return build_chroma_where(parsed_query.filters)
 
 
 def _add_metadata_aliases(
@@ -731,6 +797,27 @@ def _extract_report_dates(
                 date_matches.append((match, parsed_date))
 
     if not date_matches:
+        month_match = MONTH_DATE_PATTERN.search(normalized_query)
+        if month_match:
+            year = _resolve_year(
+                month_match.group("year"),
+                catalog,
+                ambiguities,
+            )
+            if year is None:
+                return
+
+            month = SPANISH_MONTHS[month_match.group("month")]
+            month_start, month_end = _month_bounds(year, month)
+            filters.report_date_from = _date_number(month_start)
+            filters.report_date_to = _date_number(month_end)
+            return
+
+        year_match = YEAR_DATE_PATTERN.search(normalized_query)
+        if year_match:
+            year = int(year_match.group("year"))
+            filters.report_date_from = year * 10_000 + 101
+            filters.report_date_to = year * 10_000 + 1231
         return
     if len(date_matches) > 1:
         ambiguities.append(
@@ -764,6 +851,40 @@ def _extract_report_dates(
         filters.report_date_to = date_number
 
 
+def _apply_latest_report_to_current_active_query(
+    normalized_query: str,
+    catalog: MetadataCatalog,
+    filters: MetadataFilters,
+    ambiguities: list[str],
+) -> None:
+    """Limita las consultas de incendios activos al ultimo parte disponible.
+
+    Una fecha explicita (incluido un mes o un ano) siempre tiene prioridad. Las
+    formas verbales historicas se dejan sin fecha para poder consultar todos
+    los partes en los que un incendio aparecio como activo.
+    """
+
+    asks_for_active = "ACTIVO" in filters.included_statuses
+    has_date_filter = (
+        filters.report_date_from is not None
+        or filters.report_date_to is not None
+    )
+    is_historical = HISTORICAL_ACTIVE_PATTERN.search(normalized_query) is not None
+
+    if not asks_for_active or has_date_filter or is_historical:
+        return
+
+    if catalog.latest_report_date is None:
+        ambiguities.append(
+            "No se puede interpretar 'activo' como estado actual porque el "
+            "catalogo no contiene fechas de partes."
+        )
+        return
+
+    filters.report_date_from = catalog.latest_report_date
+    filters.report_date_to = catalog.latest_report_date
+
+
 def _resolve_year(
     explicit_year: str | None,
     catalog: MetadataCatalog,
@@ -793,6 +914,15 @@ def _safe_date(
             f"La fecha detectada no es valida: {day:02d}/{month:02d}/{year}."
         )
         return None
+
+
+def _month_bounds(year: int, month: int) -> tuple[date, date]:
+    month_start = date(year, month, 1)
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    return month_start, next_month - timedelta(days=1)
 
 
 def _date_number(value: date) -> int:

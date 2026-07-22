@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from miteco_rag.retrieval_chroma import retrieve, retrieve_with_filters
+from miteco_rag.retrieval_chroma_solution import retrieve, retrieve_with_filters
 
 
 SAMPLE_METADATA = {
@@ -100,6 +100,7 @@ def test_retrieve_with_filters_returns_auditable_interpretation() -> None:
         "$and": [
             {"province_normalized": "leon"},
             {"status": "ACTIVO"},
+            {"report_date_number": 20260712},
         ]
     }
 
@@ -115,4 +116,3 @@ def test_retrieve_with_filters_stops_on_contradiction() -> None:
         )
 
     assert collection.query_arguments is None
-

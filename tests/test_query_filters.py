@@ -6,6 +6,7 @@ from miteco_rag.query_filters import (
     MetadataCatalog,
     MetadataFilters,
     build_chroma_where,
+    metadata_query,
     parse_metadata_filters,
 )
 
@@ -67,6 +68,7 @@ def test_active_fires_in_leon(catalog: MetadataCatalog) -> None:
         "$and": [
             {"province_normalized": "leon"},
             {"status": "ACTIVO"},
+            {"report_date_number": 20260715},
         ]
     }
 
@@ -79,6 +81,7 @@ def test_excludes_leon(catalog: MetadataCatalog) -> None:
         "$and": [
             {"province_normalized": {"$ne": "leon"}},
             {"status": "ACTIVO"},
+            {"report_date_number": 20260715},
         ]
     }
 
@@ -181,6 +184,54 @@ def test_exact_date_infers_the_only_corpus_year(
     }
 
 
+def test_month_without_year_infers_the_only_corpus_year(
+    catalog: MetadataCatalog,
+) -> None:
+    assert parse_where("Incendios que estuvieron activos en julio", catalog) == {
+        "$and": [
+            {"status": "ACTIVO"},
+            {"report_date_number": {"$gte": 20260701}},
+            {"report_date_number": {"$lte": 20260731}},
+        ]
+    }
+
+
+def test_month_with_year_becomes_complete_date_range(
+    catalog: MetadataCatalog,
+) -> None:
+    assert parse_where("Incendios controlados en julio de 2026", catalog) == {
+        "$and": [
+            {"status": "CONTROLADO"},
+            {"report_date_number": {"$gte": 20260701}},
+            {"report_date_number": {"$lte": 20260731}},
+        ]
+    }
+
+
+def test_year_becomes_complete_date_range(catalog: MetadataCatalog) -> None:
+    assert parse_where("Incendios controlados en 2026", catalog) == {
+        "$and": [
+            {"status": "CONTROLADO"},
+            {"report_date_number": {"$gte": 20260101}},
+            {"report_date_number": {"$lte": 20261231}},
+        ]
+    }
+
+
+def test_historical_active_query_without_date_uses_all_reports(
+    catalog: MetadataCatalog,
+) -> None:
+    assert parse_where("Incendios que han estado activos", catalog) == {
+        "status": "ACTIVO"
+    }
+
+
+def test_catalog_records_latest_report_date(catalog: MetadataCatalog) -> None:
+    assert catalog.report_dates == [20260712, 20260715]
+    assert catalog.report_years == [2026]
+    assert catalog.latest_report_date == 20260715
+
+
 def test_date_range(catalog: MetadataCatalog) -> None:
     assert parse_where(
         "Incendios entre el 12 y el 15 de julio",
@@ -234,3 +285,39 @@ def test_builder_rejects_inverted_date_range() -> None:
 
     with pytest.raises(ValueError, match="fecha inicial"):
         build_chroma_where(filters)
+
+
+def test_metadata_query_unifies_parsing_and_where(
+    catalog: MetadataCatalog,
+) -> None:
+    where = metadata_query(
+        "Incendios activos en Leon",
+        catalog,
+    )
+
+    assert where == {
+        "$and": [
+            {"province_normalized": "leon"},
+            {"status": "ACTIVO"},
+            {"report_date_number": 20260715},
+        ]
+    }
+
+
+def test_metadata_query_returns_none_without_known_filters(
+    catalog: MetadataCatalog,
+) -> None:
+    assert metadata_query(
+        "Incendios con muchos medios aereos",
+        catalog,
+    ) is None
+
+
+def test_metadata_query_rejects_ambiguities(
+    catalog: MetadataCatalog,
+) -> None:
+    with pytest.raises(ValueError, match="Consulta ambigua"):
+        metadata_query(
+            "Incendios de Leon, pero no de Leon",
+            catalog,
+        )

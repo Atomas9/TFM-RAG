@@ -46,7 +46,8 @@ Las pruebas previstas para el parser de PDF comprobaran:
 - desambiguacion de provincia y comunidad de Madrid;
 - paises, estados y situaciones operativas;
 - fechas exactas, intervalos y comparaciones estrictas;
-- contradicciones y consultas sin filtros.
+- contradicciones y consultas sin filtros;
+- la interfaz unificada `metadata_query(question, catalog)`.
 
 `test_retrieval_chroma.py` usa dobles del modelo y de la coleccion para probar:
 
@@ -55,7 +56,7 @@ Las pruebas previstas para el parser de PDF comprobaran:
 - la devolucion auditable de `ParsedQuery` y del filtro final;
 - el bloqueo de una consulta contradictoria antes de buscar.
 
-La suite actual contiene 22 pruebas y se ejecuta con:
+La suite actual contiene 25 pruebas y se ejecuta con:
 
 ```bash
 python -m pytest -q

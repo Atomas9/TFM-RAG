@@ -5,7 +5,7 @@ Fecha de revision: 2026-07-22.
 Archivos revisados:
 
 - `src/miteco_rag/query_filters.py`;
-- `src/miteco_rag/retrieval_chroma.py`;
+- `src/miteco_rag/retrieval_chroma_solution.py`;
 - `tests/test_query_filters.py`;
 - `tests/test_retrieval_chroma.py`;
 - coleccion local `MITECO_fire_snapshots`.
@@ -23,9 +23,10 @@ extraidos de la pregunta de forma determinista.
 - `MetadataFilters`, que separa inclusiones y exclusiones por campo;
 - `ParsedQuery`, que conserva la interpretacion y sus posibles ambiguedades;
 - `parse_metadata_filters()`, que analiza la pregunta;
-- `build_chroma_where()`, que genera el filtro final sin consultar la base.
+- `build_chroma_where()`, que genera el filtro final sin consultar la base;
+- `metadata_query()`, que unifica ambos pasos para el codigo cliente.
 
-`retrieval_chroma.py` contiene:
+`retrieval_chroma_solution.py` contiene:
 
 - apertura robusta de la coleccion persistente;
 - construccion del catalogo de consulta;
@@ -33,6 +34,10 @@ extraidos de la pregunta de forma determinista.
 - retrieval hibrido que devuelve resultados, interpretacion y filtro;
 - salida legible con distancia, geografia, fecha, estado y chunk;
 - una entrada `main()` protegida para evitar consultas al importar el modulo.
+
+`retrieval_chroma.py` conserva la version desarrollada por el alumno antes de
+esta solucion, para que pueda continuar el ejercicio sin tener el archivo
+resuelto encima.
 
 El parametro opcional `model` permite reutilizar BGE-M3 en varias consultas y
 usar dobles ligeros durante las pruebas. El parametro `db_collection` cumple el
@@ -66,15 +71,15 @@ similitud.
 
 ## Validacion automatizada
 
-La suite contiene 22 pruebas:
+La suite contiene 25 pruebas:
 
-- 18 pruebas puras del analizador y del constructor de `where`;
+- 21 pruebas puras del analizador, del constructor y de `metadata_query()`;
 - 4 pruebas de integracion interna con dobles de modelo y coleccion.
 
 Resultado:
 
 ```text
-22 passed
+25 passed
 ```
 
 Las pruebas no requieren PDF, Chroma, red ni descarga de BGE-M3. Tambien se
@@ -133,4 +138,3 @@ Se validaron ademas los siguientes filtros directamente con Chroma:
 Crear un conjunto pequeno de evaluacion con preguntas, filtros y snapshots
 esperados. Despues se podra medir el retrieval semantico, el filtrado y los
 casos sin respuesta antes de incorporar busqueda lexica o el LLM generador.
-

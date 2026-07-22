@@ -170,8 +170,9 @@ La consulta se divide en dos modulos:
 
 - `query_filters.py` interpreta la pregunta sin abrir Chroma ni cargar el
   modelo;
-- `retrieval_chroma.py` genera el embedding y ejecuta `collection.query()` con
-  el `where` construido.
+- `retrieval_chroma.py` conserva la implementacion en desarrollo del alumno;
+- `retrieval_chroma_solution.py` muestra como generar el embedding y ejecutar
+  `collection.query()` con el `where` construido.
 
 El analizador produce primero un `ParsedQuery` que conserva:
 
@@ -184,6 +185,10 @@ El analizador produce primero un `ParsedQuery` que conserva:
 `$in`, `$nin`, `$ne`, `$gte` y `$lte`. Esta separacion permite probar si un
 error procede de la interpretacion linguistica o de la condicion enviada a la
 base de datos.
+
+Para el uso habitual, `metadata_query(question, catalog)` encapsula ambos
+pasos, bloquea las ambiguedades y devuelve directamente el diccionario `where`
+o `None` cuando no reconoce filtros.
 
 Los campos soportados son:
 
