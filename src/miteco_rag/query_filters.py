@@ -403,6 +403,21 @@ HISTORICAL_ACTIVE_PATTERN = re.compile(
     r")"
 )
 
+CURRENT_QUERY_PATTERN = re.compile(
+    r"(?:"
+    r"\bactualmente\b"
+    r"|\bahora\b"
+    r"|\bhoy\b"
+    r"|\ba\s+dia\s+de\s+hoy\b"
+    r"|\ben\s+este\s+momento\b"
+    r"|\b(?:el\s+)?ultimo\s+parte\b"
+    r"|\bincendios?\s+actual(?:es)?\b"
+    r"|\b(?:que|cuales|cuantos?)\s+(?:incendios?|fuegos?)\s+"
+    r"(?:hay|existen)\b"
+    r"|\b(?:hay|existen)\s+(?:incendios?|fuegos?)\b"
+    r")"
+)
+
 
 def normalize_query_text(text: str) -> str:
     """Normaliza tildes, mayusculas y espacios sin reordenar la frase."""
@@ -460,7 +475,7 @@ def parse_metadata_filters(
         filters,
         ambiguities,
     )
-    _apply_latest_report_to_current_active_query(
+    _apply_latest_report_to_current_query(
         normalized_query,
         catalog,
         filters,
@@ -851,17 +866,17 @@ def _extract_report_dates(
         filters.report_date_to = date_number
 
 
-def _apply_latest_report_to_current_active_query(
+def _apply_latest_report_to_current_query(
     normalized_query: str,
     catalog: MetadataCatalog,
     filters: MetadataFilters,
     ambiguities: list[str],
 ) -> None:
-    """Limita las consultas de incendios activos al ultimo parte disponible.
+    """Limita las consultas de presente al ultimo parte disponible.
 
     Una fecha explicita (incluido un mes o un ano) siempre tiene prioridad. Las
-    formas verbales historicas se dejan sin fecha para poder consultar todos
-    los partes en los que un incendio aparecio como activo.
+    formas historicas de ``activo`` se dejan sin fecha para poder consultar
+    todos los partes en los que un incendio aparecio con ese estado.
     """
 
     asks_for_active = "ACTIVO" in filters.included_statuses
@@ -870,8 +885,10 @@ def _apply_latest_report_to_current_active_query(
         or filters.report_date_to is not None
     )
     is_historical = HISTORICAL_ACTIVE_PATTERN.search(normalized_query) is not None
+    asks_about_present = CURRENT_QUERY_PATTERN.search(normalized_query) is not None
+    asks_for_current_active = asks_for_active and not is_historical
 
-    if not asks_for_active or has_date_filter or is_historical:
+    if has_date_filter or not (asks_about_present or asks_for_current_active):
         return
 
     if catalog.latest_report_date is None:

@@ -54,11 +54,16 @@ La primera version reconoce:
 - estados del incendio en singular, plural y genero variable;
 - situaciones operativas `SE`, `0`, `1`, `2` y `3`;
 - fecha exacta del parte;
+- meses y anos traducidos a intervalos de fechas;
 - intervalos como `entre el 12 y el 15 de julio`;
 - comparaciones como `antes del` y `despues del`;
 - negaciones con `no`, `excepto`, `salvo`, `menos` y `fuera de`;
 - listas coordinadas con `y`, `o` y `ni`;
-- contrastes como `no de Leon sino de Palencia`.
+- contrastes como `no de Leon sino de Palencia`;
+- consultas presentes mediante `hay`, `existen`, `actualmente`, `ahora`,
+  `hoy`, `a dia de hoy`, `en este momento` y `ultimo parte`;
+- consultas historicas con formas como `estuvieron activos` o `han estado
+  activos`.
 
 Las entidades mas largas tienen prioridad. Por ello `Castilla y Leon` se
 interpreta como comunidad y no como una aparicion de la provincia de Leon. Los
@@ -71,15 +76,15 @@ similitud.
 
 ## Validacion automatizada
 
-La suite contiene 25 pruebas:
+La suite contiene 38 pruebas:
 
-- 21 pruebas puras del analizador, del constructor y de `metadata_query()`;
+- 34 pruebas puras del analizador, del constructor y de `metadata_query()`;
 - 4 pruebas de integracion interna con dobles de modelo y coleccion.
 
 Resultado:
 
 ```text
-25 passed
+38 passed
 ```
 
 Las pruebas no requieren PDF, Chroma, red ni descarga de BGE-M3. Tambien se
@@ -88,26 +93,30 @@ el diff.
 
 ## Validacion con la coleccion real
 
-La consulta `Hay incendios activos en Leon?` genero:
+La consulta `Hay incendios activos en Leon?` genera actualmente:
 
 ```python
 {
     "$and": [
         {"province_normalized": "leon"},
         {"status": "ACTIVO"},
+        {"report_date_number": 20260719},
     ]
 }
 ```
 
-Los cinco resultados pertenecen a la provincia de Leon. El incendio de Ribas
-de Sil, que antes aparecia por mencionar `LEON (BASE ACO)` como origen de un
-medio, queda correctamente excluido.
+No hay resultados porque el ultimo parte global, fechado el 19 de julio, no
+contiene incendios de Leon con estado activo. La consulta historica `Que
+incendios estuvieron activos en Leon?` omite la fecha maxima y recupera los
+cinco snapshots historicos de esa provincia.
 
 Se validaron ademas los siguientes filtros directamente con Chroma:
 
 | Consulta | Registros | Comprobacion |
 | --- | ---: | --- |
-| Activos, pero no de Leon | 15 | Todos activos y fuera de Leon |
+| Activos, pero no de Leon | 1 | Activo y fuera de Leon en el ultimo parte |
+| Estuvieron activos en Leon | 5 | Consulta historica sin fecha maxima |
+| Fuegos que hay en Leon y Palencia | 0 | `$in` geografico y ultimo parte |
 | No de Leon, sino de Palencia | 0 | Palencia se interpreta como inclusion |
 | Incendios en Huelva | 0 | Provincia reconocida aunque no haya datos |
 | Incendios de Castilla y Leon | 9 | Todos de esa comunidad |
@@ -132,9 +141,11 @@ Se validaron ademas los siguientes filtros directamente con Chroma:
 7. Todavia no existe busqueda lexica con puntuacion ni fusion de rankings.
 8. No se ha definido un umbral de distancia para rechazar resultados poco
    relevantes.
+9. La deteccion temporal es determinista y solo cubre las construcciones
+   documentadas; la siguiente version evaluara un parser asistido por LLM.
 
 ## Siguiente incremento recomendado
 
-Crear un conjunto pequeno de evaluacion con preguntas, filtros y snapshots
-esperados. Despues se podra medir el retrieval semantico, el filtrado y los
-casos sin respuesta antes de incorporar busqueda lexica o el LLM generador.
+Evaluar un LLM como parser de una intencion estructurada y validada con
+Pydantic, manteniendo esta version determinista como linea base. El LLM no debe
+generar directamente diccionarios `where` sin validacion.

@@ -362,6 +362,15 @@ filtros de metadatos interpretados de forma determinista.
   y la distincion entre provincia y comunidad de Madrid.
 - Se incorporaron estados, situaciones operativas y fechas del parte exactas,
   por intervalos y mediante comparaciones.
+- El catalogo conserva ahora todas las fechas disponibles y calcula
+  `latest_report_date`.
+- Se anadieron consultas por mes y ano, traducidas a intervalos sobre
+  `report_date_number` sin duplicar metadatos en Chroma.
+- Se distinguieron formulaciones historicas como `estuvieron activos` de las
+  consultas de presente.
+- Las expresiones `hay`, `existen`, `actualmente`, `ahora`, `hoy`, `a dia de
+  hoy`, `en este momento` y `ultimo parte` seleccionan el ultimo parte cuando
+  no existe una fecha explicita.
 - Se implemento `build_chroma_where()` con operadores de igualdad, inclusion,
   exclusion, conjuncion y rango.
 - Se anadio `metadata_query(question, catalog)` como interfaz unificada que
@@ -385,17 +394,23 @@ filtros de metadatos interpretados de forma determinista.
 - Las provincias ausentes, como Huelva o Palencia, producen un filtro valido y
   cero resultados; no se sustituyen por vecinos semanticos irrelevantes.
 - La primera version es determinista y explicable. Un LLM para interpretar
-  filtros solo se considerara posteriormente como alternativa experimental.
+  filtros se abordara en la siguiente sesion como alternativa experimental,
+  con salida estructurada y validada antes de construir el `where`.
 - Las fechas consultables son por ahora las fechas de los partes.
+- El ultimo parte significa la fecha maxima del corpus y no equivale a una
+  fuente de informacion en tiempo real.
 
 ### Validacion
 
-- `python -m pytest -q`: 25 pruebas superadas.
+- `python -m pytest -q`: 38 pruebas superadas.
 - `query_filters.py`, `retrieval_chroma.py` y
   `retrieval_chroma_solution.py` compilan correctamente.
-- La consulta hibrida de incendios activos en Leon devuelve cinco snapshots de
-  esa provincia y elimina el anterior falso positivo de Lugo.
-- La exclusion de Leon devuelve 15 incendios activos de otras provincias.
+- `Hay incendios activos en Leon?` devuelve cero snapshots porque el ultimo
+  parte global es del 19 de julio y no contiene activos de Leon.
+- `Que incendios estuvieron activos en Leon?` devuelve los cinco snapshots
+  historicos activos de esa provincia.
+- `Que fuegos hay en Leon y Palencia?` genera un `$in` entre provincias y la
+  fecha del ultimo parte; Palencia no contiene registros en el corpus.
 - Palencia y Huelva se reconocen como provincias y devuelven cero registros.
 - Castilla y Leon devuelve 9 snapshots de la comunidad.
 - La exclusion de Espana devuelve el unico snapshot de Portugal.
@@ -418,6 +433,6 @@ filtros de metadatos interpretados de forma determinista.
 
 ### Siguiente paso
 
-Crear un conjunto de evaluacion con preguntas y respuestas esperadas. Medir por
-separado la exactitud de filtros y la calidad del ranking semantico antes de
-implementar recuperacion lexica y, posteriormente, generacion con Ollama.
+Disenar una segunda version del analizador basada en un LLM que devuelva una
+intencion estructurada. Compararla con la linea base determinista y conservar
+la validacion Pydantic y la construccion controlada del filtro de Chroma.

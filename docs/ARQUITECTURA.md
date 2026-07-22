@@ -181,6 +181,10 @@ El analizador produce primero un `ParsedQuery` que conserva:
 - intervalo de fechas del parte;
 - contradicciones o ambiguedades detectadas.
 
+`MetadataCatalog` conserva ademas las fechas de parte disponibles, los anos y
+`latest_report_date`. No se duplican mes y ano en Chroma: las consultas por
+mes o ano se traducen a limites sobre `report_date_number`.
+
 `build_chroma_where()` realiza despues una traduccion independiente a `$and`,
 `$in`, `$nin`, `$ne`, `$gte` y `$lte`. Esta separacion permite probar si un
 error procede de la interpretacion linguistica o de la condicion enviada a la
@@ -209,6 +213,17 @@ El orden de prioridad evita interpretar `Leon` dentro de `Castilla y Leon` y
 resuelve expresiones como `no de Leon sino de Palencia`. Las contradicciones no
 se ejecutan: se devuelve un error explicito para solicitar una aclaracion.
 
+La interpretacion temporal distingue tres casos:
+
+- una fecha, mes o ano explicito se convierte en fecha exacta o intervalo;
+- `activo` y expresiones presentes como `hay`, `existen`, `actualmente`,
+  `ahora`, `a dia de hoy` o `ultimo parte` usan el ultimo parte disponible;
+- formas historicas como `estuvieron activos` no reciben automaticamente la
+  fecha maxima.
+
+El ultimo parte es la fecha maxima del corpus, no informacion en tiempo real.
+Las respuestas posteriores deberan comunicar siempre la fecha de referencia.
+
 La funcion de bajo nivel `retrieve()` admite un `where` manual. La funcion
 `retrieve_with_filters()` construye el catalogo, interpreta la pregunta,
 comprueba ambiguedades y devuelve resultados, interpretacion y filtro final.
@@ -217,6 +232,10 @@ Todavia no existe un planificador que elija entre `get()` y `query()`: la ruta
 automatica actual siempre hace ranking vectorial dentro de los registros que
 cumplen el filtro. Tampoco se ha incorporado busqueda lexica ni generacion con
 el LLM.
+
+La siguiente iteracion incorporara un LLM como parser semantico de intenciones
+estructuradas. Su salida se validara con Pydantic y se traducira mediante el
+constructor determinista; el modelo no generara directamente un `where` libre.
 
 ## Limites iniciales
 

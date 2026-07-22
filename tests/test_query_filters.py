@@ -226,6 +226,58 @@ def test_historical_active_query_without_date_uses_all_reports(
     }
 
 
+def test_present_existence_query_uses_latest_report(
+    catalog: MetadataCatalog,
+) -> None:
+    assert parse_where(
+        "Que fuegos hay en Leon y Palencia",
+        catalog,
+    ) == {
+        "$and": [
+            {"province_normalized": {"$in": ["leon", "palencia"]}},
+            {"report_date_number": 20260715},
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Que incendios hay actualmente",
+        "Que fuegos existen ahora",
+        "Incendios a dia de hoy",
+        "Incendios en este momento",
+        "Incendios del ultimo parte",
+    ],
+)
+def test_explicit_present_expressions_use_latest_report(
+    question: str,
+    catalog: MetadataCatalog,
+) -> None:
+    assert parse_where(question, catalog) == {
+        "report_date_number": 20260715
+    }
+
+
+def test_explicit_month_has_priority_over_present_expression(
+    catalog: MetadataCatalog,
+) -> None:
+    assert parse_where("Que incendios hay en julio", catalog) == {
+        "$and": [
+            {"report_date_number": {"$gte": 20260701}},
+            {"report_date_number": {"$lte": 20260731}},
+        ]
+    }
+
+
+def test_past_existence_query_does_not_use_latest_report(
+    catalog: MetadataCatalog,
+) -> None:
+    assert parse_where("Que incendios hubo en Leon", catalog) == {
+        "province_normalized": "leon"
+    }
+
+
 def test_catalog_records_latest_report_date(catalog: MetadataCatalog) -> None:
     assert catalog.report_dates == [20260712, 20260715]
     assert catalog.report_years == [2026]

@@ -30,7 +30,9 @@ La solucion de referencia para la recuperacion semantica e hibrida se conserva
 por separado en `src/miteco_rag/retrieval_chroma_solution.py`. El analizador
 determinista de `src/miteco_rag/query_filters.py` reconoce filtros incluidos y
 excluidos de pais, comunidad, provincia, localizacion, estado, situacion
-operativa y fecha del parte.
+operativa y fecha del parte. Tambien distingue consultas presentes e
+historicas: si se pregunta que incendios `hay`, `existen` o estan `activos`
+sin indicar fecha, utiliza el ultimo parte disponible.
 
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
@@ -173,10 +175,14 @@ results, parsed_query, where = retrieve_with_filters(
 `parse_metadata_filters()` separa la interpretacion del lenguaje natural y
 `build_chroma_where()` genera la condicion de Chroma. Se soportan inclusiones,
 exclusiones, listas, contrastes como `no de Leon sino de Palencia`, fechas
-exactas y rangos. Las comunidades y provincias proceden de catalogos
-controlados; las localizaciones se obtienen de los metadatos de la coleccion.
-La funcion de conveniencia `metadata_query(question, catalog)` unifica ambos
-pasos y devuelve directamente el valor que debe recibir `where`.
+exactas, meses, anos y rangos. Las expresiones de presente como `hay`,
+`actualmente`, `ahora`, `a dia de hoy` o `ultimo parte` seleccionan la fecha
+maxima del corpus. Las formas historicas como `estuvieron activos` conservan
+todos los partes si no se especifica otro periodo. Las comunidades y
+provincias proceden de catalogos controlados; las localizaciones se obtienen de
+los metadatos de la coleccion. La funcion de conveniencia
+`metadata_query(question, catalog)` unifica ambos pasos y devuelve directamente
+el valor que debe recibir `where`.
 
 Las pruebas del analizador y de su integracion se ejecutan sin cargar el modelo:
 
@@ -186,10 +192,10 @@ python -m pytest -q
 
 ## Siguiente fase
 
-La proxima fase evaluara la calidad del retrieval con un conjunto de preguntas
-y resultados esperados. Despues se incorporara recuperacion lexica y se
-decidira como fusionarla con los embeddings. La generacion de respuestas con
-Ollama se abordara cuando la recuperacion sea suficientemente fiable.
+La proxima fase estudiara una segunda interpretacion de consultas asistida por
+LLM. El modelo producira una intencion estructurada y validable; no escribira
+directamente condiciones libres de Chroma. La version determinista actual se
+mantendra como linea base explicable para comparar cobertura y precision.
 
 ## Alcance inicial
 
