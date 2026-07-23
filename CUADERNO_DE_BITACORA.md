@@ -436,3 +436,45 @@ filtros de metadatos interpretados de forma determinista.
 Disenar una segunda version del analizador basada en un LLM que devuelva una
 intencion estructurada. Compararla con la linea base determinista y conservar
 la validacion Pydantic y la construccion controlada del filtro de Chroma.
+
+## 2026-07-23
+
+### Objetivo
+
+Definir cómo se incorporará un LLM a la interpretación de consultas y crear
+una explicación global del proyecto más cómoda de leer que la bitácora diaria.
+
+### Trabajo realizado
+
+- Se diseñó una arquitectura en la que el parser determinista y el parser LLM
+  pueden ejecutarse y compararse de forma independiente.
+- Se decidió que el LLM devolverá una intención estructurada validada con
+  Pydantic, en lugar de escribir directamente el `where` de Chroma.
+- Se propuso utilizar LangGraph cuando existan nodos ya comprobados para
+  clasificación, retrieval, evaluación del contexto, reformulación y
+  generación.
+- Se limitó el futuro bucle de reformulación a un único segundo retrieval.
+- Se creó `docs/PROCESO_DEL_PROYECTO.md`, que explica el desarrollo completo
+  por etapas, las decisiones adoptadas, el estado actual y los límites.
+- Se enlazó la nueva guía desde el README.
+
+### Decisiones
+
+- El parser LLM se implementará primero como una función independiente.
+- LangGraph se utilizará como workflow controlado, no como un agente con
+  libertad para repetir consultas indefinidamente.
+- Los resultados exactos vacíos se distinguirán de un contexto semántico de
+  mala calidad.
+- La versión determinista se conservará como línea base para evaluar la mejora
+  real aportada por el LLM.
+
+### Validación
+
+- La nueva guía resume las fases desde la lectura de PDF hasta el retrieval
+  híbrido y contiene los comandos para reconstruir el flujo.
+- `git diff --check`: sin errores de formato.
+
+### Siguiente paso
+
+Definir el modelo Pydantic de intención de consulta e implementar
+`parse_query_with_llm()` sin introducir todavía la orquestación de LangGraph.

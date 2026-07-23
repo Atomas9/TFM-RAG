@@ -212,6 +212,9 @@ mantendra como linea base explicable para comparar cobertura y precision.
 Las decisiones y avances diarios se registran en
 [CUADERNO_DE_BITACORA.md](CUADERNO_DE_BITACORA.md).
 
+Una explicación más narrativa y resumida de todo el proceso está disponible en
+[docs/PROCESO_DEL_PROYECTO.md](docs/PROCESO_DEL_PROYECTO.md).
+
 La solucion comentada de la primera fase puede estudiarse y ejecutarse desde
 [notebooks/01_fase1_parseo_miteco.ipynb](notebooks/01_fase1_parseo_miteco.ipynb).
 
