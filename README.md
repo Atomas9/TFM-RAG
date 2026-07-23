@@ -192,10 +192,14 @@ python -m pytest -q
 
 ## Siguiente fase
 
-La proxima fase estudiara una segunda interpretacion de consultas asistida por
-LLM. El modelo producira una intencion estructurada y validable; no escribira
-directamente condiciones libres de Chroma. La version determinista actual se
-mantendra como linea base explicable para comparar cobertura y precision.
+La proxima fase construira un workflow controlado con LangGraph. El parser
+determinista se conservara como linea base y un LLM revisara si sus filtros son
+coherentes y suficientes. Las correcciones se validaran con Pydantic y se
+reconciliaran campo por campo antes de construir el `where`.
+
+El workflow elegira entre recuperacion semantica, hibrida, exhaustiva, recuento
+o linea temporal. Despues de consultar Chroma evaluara el contexto y permitira
+como maximo un segundo retrieval antes de responder o abstenerse.
 
 ## Alcance inicial
 
@@ -214,6 +218,9 @@ Las decisiones y avances diarios se registran en
 
 Una explicación más narrativa y resumida de todo el proceso está disponible en
 [docs/PROCESO_DEL_PROYECTO.md](docs/PROCESO_DEL_PROYECTO.md).
+
+La arquitectura acordada para el workflow con LLM y LangGraph se documenta en
+[docs/ARQUITECTURA_LANGGRAPH.md](docs/ARQUITECTURA_LANGGRAPH.md).
 
 La solucion comentada de la primera fase puede estudiarse y ejecutarse desde
 [notebooks/01_fase1_parseo_miteco.ipynb](notebooks/01_fase1_parseo_miteco.ipynb).

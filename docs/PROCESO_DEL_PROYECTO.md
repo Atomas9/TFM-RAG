@@ -308,40 +308,45 @@ La versión actual todavía tiene varios límites:
 - no existe generación de respuesta ni memoria conversacional;
 - la identidad entre snapshots de días distintos sigue siendo heurística.
 
-## 14. Siguiente fase: interpretación con LLM
+## 14. Siguiente fase: workflow con LLM y LangGraph
 
-La siguiente etapa incorporará un LLM para interpretar preguntas que superen
-las reglas deterministas.
+La siguiente etapa incorporará un workflow controlado con LangGraph. Sus nodos
+combinarán código determinista y llamadas al LLM.
 
-El LLM no escribirá directamente el `where` de Chroma. Devolverá una intención
-estructurada que será:
-
-1. validada con Pydantic;
-2. normalizada con los catálogos del proyecto;
-3. comprobada para detectar contradicciones;
-4. traducida al filtro final mediante código determinista.
-
-Durante el desarrollo se compararán en paralelo:
+El recorrido previsto será:
 
 ```text
-pregunta
-   ├── parser determinista
-   └── parser mediante LLM
+parser determinista
+        ↓
+revisión de dominio y filtros mediante LLM
+        ↓
+reconciliación y validación campo por campo
+        ↓
+selección del tipo de retrieval
+        ↓
+consulta a Chroma
+        ↓
+evaluación del contexto
+        ↓
+respuesta, ausencia documentada o un único reintento
 ```
 
-Esto permitirá medir cuándo mejora el LLM y cuándo introduce errores.
+El LLM no escribirá directamente el `where` de Chroma. Devolverá una intención
+estructurada que será validada con Pydantic, normalizada con los catálogos y
+traducida por el constructor determinista.
 
-Después se podrá construir un workflow con LangGraph que incluya:
+No se descartarán todos los filtros deterministas porque falle uno ni se
+añadirán ciegamente todos los filtros del LLM. La reconciliación conservará los
+campos correctos, modificará solo los discutidos y registrará la procedencia de
+cada decisión.
 
-- clasificación de preguntas relacionadas o no con incendios;
-- selección del plan de retrieval;
-- consulta a Chroma;
-- evaluación de la suficiencia del contexto;
-- un único intento controlado de reformulación;
-- generación de una respuesta fundamentada.
+El workflow también decidirá si una pregunta necesita ranking semántico,
+búsqueda híbrida, todos los registros, un recuento o una evolución temporal.
+Después del retrieval distinguirá una consulta exacta sin coincidencias de un
+contexto semántico deficiente.
 
-Antes de montar el grafo completo se implementará el parser LLM como una
-función independiente y comprobable.
+El diseño completo se encuentra en
+[ARQUITECTURA_LANGGRAPH.md](ARQUITECTURA_LANGGRAPH.md).
 
 ## 15. Archivos principales
 
@@ -355,6 +360,7 @@ función independiente y comprobable.
 | `tests/` | Pruebas automatizadas |
 | `CUADERNO_DE_BITACORA.md` | Registro diario detallado |
 | `docs/ARQUITECTURA.md` | Decisiones técnicas de arquitectura |
+| `docs/ARQUITECTURA_LANGGRAPH.md` | Workflow previsto con LLM y LangGraph |
 
 ## 16. Cómo reconstruir el flujo actual
 
@@ -371,4 +377,3 @@ Para validar el proyecto:
 ```bash
 python -m pytest -q
 ```
-

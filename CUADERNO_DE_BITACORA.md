@@ -453,9 +453,22 @@ una explicación global del proyecto más cómoda de leer que la bitácora diari
 - Se propuso utilizar LangGraph cuando existan nodos ya comprobados para
   clasificación, retrieval, evaluación del contexto, reformulación y
   generación.
+- Se acordó definitivamente utilizar LangGraph como workflow controlado con
+  nodos deterministas y nodos asistidos por LLM.
+- Se definió un nodo LLM que combina clasificación de dominio, revisión de los
+  filtros deterministas y propuesta de correcciones.
+- Se definió una reconciliación determinista campo por campo que conserva la
+  procedencia de cada filtro.
+- Se incorporó un planificador que podrá elegir retrieval semántico, híbrido,
+  exhaustivo, recuento o línea temporal.
+- Se añadió una evaluación posterior a Chroma que distingue contexto
+  suficiente, cero coincidencias exactas, mala similitud y cobertura
+  incompleta.
 - Se limitó el futuro bucle de reformulación a un único segundo retrieval.
 - Se creó `docs/PROCESO_DEL_PROYECTO.md`, que explica el desarrollo completo
   por etapas, las decisiones adoptadas, el estado actual y los límites.
+- Se creó `docs/ARQUITECTURA_LANGGRAPH.md` con el grafo, sus ramas, el estado,
+  los nodos, las reglas de validación y el orden previsto de implementación.
 - Se enlazó la nueva guía desde el README.
 
 ### Decisiones
@@ -463,6 +476,12 @@ una explicación global del proyecto más cómoda de leer que la bitácora diari
 - El parser LLM se implementará primero como una función independiente.
 - LangGraph se utilizará como workflow controlado, no como un agente con
   libertad para repetir consultas indefinidamente.
+- El LLM propondrá una intención estructurada y nunca ejecutará directamente
+  un `where` libre.
+- Un error en un filtro no eliminará automáticamente todos los valores
+  deterministas y una propuesta incompleta no se fusionará sin validación.
+- Preguntas sobre todos los registros, recuentos o evoluciones no se resolverán
+  siempre mediante `top_k`.
 - Los resultados exactos vacíos se distinguirán de un contexto semántico de
   mala calidad.
 - La versión determinista se conservará como línea base para evaluar la mejora
@@ -472,9 +491,11 @@ una explicación global del proyecto más cómoda de leer que la bitácora diari
 
 - La nueva guía resume las fases desde la lectura de PDF hasta el retrieval
   híbrido y contiene los comandos para reconstruir el flujo.
+- La arquitectura acordada queda documentada sin modificar el código.
 - `git diff --check`: sin errores de formato.
 
 ### Siguiente paso
 
-Definir el modelo Pydantic de intención de consulta e implementar
-`parse_query_with_llm()` sin introducir todavía la orquestación de LangGraph.
+Definir los modelos Pydantic de intención y revisión e implementar el cliente
+LLM como una función independiente. Después se probarán la reconciliación y los
+nodos antes de montar el workflow completo.

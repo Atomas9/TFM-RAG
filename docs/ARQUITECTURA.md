@@ -233,9 +233,22 @@ automatica actual siempre hace ranking vectorial dentro de los registros que
 cumplen el filtro. Tampoco se ha incorporado busqueda lexica ni generacion con
 el LLM.
 
-La siguiente iteracion incorporara un LLM como parser semantico de intenciones
-estructuradas. Su salida se validara con Pydantic y se traducira mediante el
-constructor determinista; el modelo no generara directamente un `where` libre.
+La siguiente iteracion se orquestara como un workflow controlado con
+LangGraph. Mantendra el parser determinista y añadira una revision LLM que
+clasifique el dominio, compruebe si los filtros son suficientes y proponga
+correcciones estructuradas.
+
+Un nodo determinista reconciliara ambas interpretaciones campo por campo,
+conservara la procedencia de cada filtro y construira el `where`. Otro nodo
+elegira entre ranking semantico, retrieval hibrido, recuperación exhaustiva,
+recuento o linea temporal.
+
+Tras consultar Chroma se distinguira entre contexto suficiente, cero
+coincidencias exactas, mala similitud y cobertura incompleta. Solo los dos
+ultimos casos podran activar un segundo y ultimo retrieval.
+
+El diseño completo, los grafos de ramas, el estado y los nodos previstos se
+describen en [ARQUITECTURA_LANGGRAPH.md](ARQUITECTURA_LANGGRAPH.md).
 
 ## Limites iniciales
 
