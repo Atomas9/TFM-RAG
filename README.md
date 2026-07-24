@@ -34,6 +34,13 @@ operativa y fecha del parte. Tambien distingue consultas presentes e
 historicas: si se pregunta que incendios `hay`, `existen` o estan `activos`
 sin indicar fecha, utiliza el ultimo parte disponible.
 
+El MVP de generación está implementado en
+`src/miteco_rag/augmented_generator.py`. Formatea los resultados de Chroma,
+construye mensajes con instrucciones de grounding y genera la respuesta con
+`gemma4:31b-cloud` mediante Ollama. `src/miteco_rag/main.py` conecta por
+terminal retrieval, contexto y generación. Si Chroma no devuelve documentos,
+se responde de forma controlada sin llamar al LLM.
+
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
 ocho PDF sin errores. La delimitacion de bloques, la construcción de snapshots
@@ -192,14 +199,27 @@ python -m pytest -q
 
 ## Siguiente fase
 
-La proxima fase construira un workflow controlado con LangGraph. El parser
-determinista se conservara como linea base y un LLM revisara si sus filtros son
-coherentes y suficientes. Las correcciones se validaran con Pydantic y se
-reconciliaran campo por campo antes de construir el `where`.
+El siguiente incremento añadira el revisor LLM de filtros. El parser
+determinista se conservara como linea base y el modelo comprobara si sus
+filtros son coherentes y suficientes. Las correcciones se validaran con
+Pydantic y se reconciliaran campo por campo antes de construir el `where`.
 
-El workflow elegira entre recuperacion semantica, hibrida, exhaustiva, recuento
-o linea temporal. Despues de consultar Chroma evaluara el contexto y permitira
-como maximo un segundo retrieval antes de responder o abstenerse.
+Después, el workflow de LangGraph elegira entre recuperacion semantica,
+hibrida, exhaustiva, recuento o linea temporal. Tras consultar Chroma evaluara
+el contexto y permitira como maximo un segundo retrieval antes de responder o
+abstenerse.
+
+## Probar el MVP
+
+Con Ollama iniciado y el modelo Cloud disponible:
+
+```bash
+python src/miteco_rag/main.py
+```
+
+El programa solicita una pregunta, recupera hasta diez chunks y muestra la
+respuesta fundamentada. La primera ejecución del embedding puede tardar por la
+carga de BGE-M3.
 
 ## Alcance inicial
 
@@ -233,6 +253,9 @@ La revision del indice vectorial esta en
 
 La revision del retrieval hibrido esta en
 [docs/REVISION_RETRIEVAL.md](docs/REVISION_RETRIEVAL.md).
+
+La revisión del MVP generador está en
+[docs/REVISION_GENERADOR.md](docs/REVISION_GENERADOR.md).
 
 Los apuntes sobre el propósito y el uso de cada dependencia están en
 [docs/apuntes/LIBRERIAS.md](docs/apuntes/LIBRERIAS.md).

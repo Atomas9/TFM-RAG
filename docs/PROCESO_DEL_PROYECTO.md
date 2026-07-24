@@ -40,8 +40,9 @@ colección persistente de ChromaDB
 búsqueda semántica + filtros de metadatos
 ```
 
-La generación de la respuesta final mediante un LLM es la siguiente fase del
-proyecto.
+El primer MVP ya genera una respuesta final mediante Ollama Cloud. La siguiente
+fase revisará los filtros con un LLM y orquestará progresivamente el workflow
+con LangGraph.
 
 ## 2. Preparación del repositorio y del entorno
 
@@ -284,9 +285,12 @@ En este momento están completadas:
 - almacenamiento persistente en Chroma;
 - búsqueda semántica;
 - búsqueda híbrida con filtros deterministas;
-- pruebas automatizadas del parser de consultas y del retrieval.
+- formateo del contexto recuperado;
+- generación fundamentada mediante `gemma4:31b-cloud`;
+- punto de entrada interactivo por terminal;
+- pruebas automatizadas del parser, retrieval y generador.
 
-La suite actual contiene 38 pruebas y puede ejecutarse con:
+La suite actual contiene 42 pruebas y puede ejecutarse con:
 
 ```bash
 python -m pytest -q
@@ -305,13 +309,16 @@ La versión actual todavía tiene varios límites:
 - una búsqueda sin resultados no siempre significa que un incendio no
   existiera, sino que no consta en los partes disponibles;
 - todavía no se ha calibrado un umbral de distancia semántica;
-- no existe generación de respuesta ni memoria conversacional;
+- no existe todavía revisión LLM de filtros ni memoria conversacional;
+- una provincia y una comunidad coordinadas como alternativas pueden
+  combinarse incorrectamente con `$and`;
 - la identidad entre snapshots de días distintos sigue siendo heurística.
 
-## 14. Siguiente fase: workflow con LLM y LangGraph
+## 14. Siguiente fase: revisión de filtros y LangGraph
 
-La siguiente etapa incorporará un workflow controlado con LangGraph. Sus nodos
-combinarán código determinista y llamadas al LLM.
+La generación ya funciona. La siguiente etapa incorporará el revisor LLM de
+filtros y, después, un workflow controlado con LangGraph. Sus nodos combinarán
+código determinista y llamadas al modelo.
 
 El recorrido previsto será:
 
@@ -357,6 +364,8 @@ El diseño completo se encuentra en
 | `src/miteco_rag/query_filters.py` | Interpretación determinista de filtros |
 | `src/miteco_rag/retrieval_chroma.py` | Implementación de retrieval desarrollada durante el aprendizaje |
 | `src/miteco_rag/retrieval_chroma_solution.py` | Implementación de referencia |
+| `src/miteco_rag/augmented_generator.py` | Contexto y generación con Ollama |
+| `src/miteco_rag/main.py` | Punto de entrada del MVP |
 | `tests/` | Pruebas automatizadas |
 | `CUADERNO_DE_BITACORA.md` | Registro diario detallado |
 | `docs/ARQUITECTURA.md` | Decisiones técnicas de arquitectura |
@@ -369,7 +378,7 @@ Con el entorno `RAG-TFM` activado y los PDF en `data/raw/miteco`:
 ```bash
 python src/miteco_rag/parseo_y_chuncking.py
 python src/miteco_rag/embeddings_chroma.py
-python src/miteco_rag/retrieval_chroma.py
+python src/miteco_rag/main.py
 ```
 
 Para validar el proyecto:

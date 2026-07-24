@@ -59,7 +59,14 @@ Las pruebas previstas para el parser de PDF comprobaran:
 - la devolucion auditable de `ParsedQuery` y del filtro final;
 - el bloqueo de una consulta contradictoria antes de buscar.
 
-La suite actual contiene 38 pruebas y se ejecuta con:
+`test_augmented_generator.py` usa un cliente Ollama simulado para comprobar:
+
+- la numeracion y union de chunks;
+- el contexto vacio;
+- que no se llama al modelo sin documentos;
+- que pregunta, contexto y modelo se envian correctamente.
+
+La suite actual contiene 42 pruebas y se ejecuta con:
 
 ```bash
 python -m pytest -q

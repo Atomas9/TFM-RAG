@@ -499,3 +499,65 @@ una explicación global del proyecto más cómoda de leer que la bitácora diari
 Definir los modelos Pydantic de intención y revisión e implementar el cliente
 LLM como una función independiente. Después se probarán la reconciliación y los
 nodos antes de montar el workflow completo.
+
+## 2026-07-24
+
+### Objetivo
+
+Completar y validar un MVP que conecte el retrieval híbrido con un LLM
+generador de respuestas mediante Ollama Cloud.
+
+### Trabajo realizado
+
+- Se terminó `generate_context()` para convertir el `QueryResult` anidado de
+  Chroma en un único texto con chunks numerados.
+- Se completó `generate_answer()` con mensajes `system` y `user`, grounding,
+  referencias documentales y respuesta controlada para contexto vacío.
+- Se creó `src/miteco_rag/main.py` como punto de entrada interactivo.
+- Se confirmó que `gemma4:31b-cloud` está disponible en Ollama.
+- Se añadieron cuatro pruebas unitarias con un cliente Ollama simulado.
+- Se detectó una limitación del filtro plano al coordinar León, provincia, con
+  Andalucía, comunidad autónoma: actualmente se genera un `$and` imposible en
+  lugar del `$or` pretendido.
+- Se creó `docs/REVISION_GENERADOR.md` y se actualizaron README, arquitectura,
+  proceso y documentación de pruebas.
+
+### Decisiones
+
+- El contexto se construye como un string, aunque durante su preparación se
+  utilice una lista de fragmentos.
+- Las instrucciones permanentes permanecen en el mensaje `system` y la
+  pregunta y el contexto se envían en el mensaje `user`.
+- Un contexto vacío no activa una llamada al LLM.
+- La respuesta sin documentos no afirma que el incendio no existiera; indica
+  que no se recuperaron registros con los filtros interpretados.
+- Los futuros filtros estructurados deberán conservar grupos lógicos `AND/OR`
+  entre entidades de distintos niveles geográficos.
+
+### Validación
+
+- `python -m pytest -q`: 42 pruebas superadas.
+- `augmented_generator.py` y `main.py` compilan correctamente.
+- `git diff --check`: sin errores de formato.
+- La llamada mínima a `gemma4:31b-cloud` respondió correctamente.
+- La prueba completa `¿Qué incendios estuvieron activos en León?` recuperó
+  cinco snapshots y produjo una respuesta que agrupó incendios y citó fechas,
+  archivos y páginas.
+- La colección contiene 5 snapshots de León y 2 de Andalucía; el `$or`
+  correcto devolvería 7, mientras el `$and` actual devuelve 0.
+
+### Problemas o riesgos
+
+- El parser determinista no conserva todavía la relación lógica entre
+  geografías de campos diferentes.
+- El generador confía en el contexto recuperado porque todavía no existe un
+  nodo separado de evaluación de suficiencia.
+- El modelo y el acceso a Ollama todavía están configurados en el código y no
+  mediante una configuración externa.
+- No se han implementado streaming ni citas estructuradas.
+
+### Siguiente paso
+
+Definir el modelo Pydantic de intención con grupos lógicos y construir el
+revisor LLM que clasifique el dominio y evalúe la coherencia y suficiencia de
+los filtros deterministas.

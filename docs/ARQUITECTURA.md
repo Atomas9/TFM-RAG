@@ -230,8 +230,11 @@ comprueba ambiguedades y devuelve resultados, interpretacion y filtro final.
 
 Todavia no existe un planificador que elija entre `get()` y `query()`: la ruta
 automatica actual siempre hace ranking vectorial dentro de los registros que
-cumplen el filtro. Tampoco se ha incorporado busqueda lexica ni generacion con
-el LLM.
+cumplen el filtro. Tampoco se ha incorporado busqueda lexica.
+
+El primer generador aumentado ya formatea los chunks y responde con Ollama
+Cloud. Aun no existe un evaluador de suficiencia posterior al retrieval ni un
+revisor LLM de los filtros.
 
 La siguiente iteracion se orquestara como un workflow controlado con
 LangGraph. Mantendra el parser determinista y añadira una revision LLM que
