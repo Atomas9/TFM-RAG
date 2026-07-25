@@ -9,8 +9,10 @@ informacion por similitud semantica, por metadatos o combinando ambos metodos.
 
 ```text
 MITECO
-  -> descarga del PDF y hash SHA-256
-  -> almacenamiento en data/raw/miteco
+  -> GitHub Actions, dos intentos diarios
+  -> descubrimiento y validacion del parte definitivo
+  -> fecha interna, hash SHA-256 y manifiesto JSONL
+  -> almacenamiento versionado en data/raw/miteco
   -> extraccion por paginas con PyMuPDF
   -> parser especifico basado en una maquina de estados
   -> validacion de FireSnapshot con Pydantic
@@ -35,7 +37,7 @@ pregunta
 
 | Responsabilidad | Tecnologia |
 | --- | --- |
-| Descarga | httpx y Beautiful Soup |
+| Descarga programada | GitHub Actions, httpx y Beautiful Soup |
 | Lectura de PDF | PyMuPDF |
 | Esquemas y validacion | Pydantic |
 | Normalizacion aproximada | unicodedata y RapidFuzz |
@@ -43,6 +45,12 @@ pregunta
 | Base vectorial | ChromaDB |
 | Generacion | Ollama y gemma4:31b-cloud |
 | Pruebas | pytest |
+
+La ingesta automática es una etapa independiente. Dos ejecuciones diarias
+descargan el enlace estable de MITECO, pero la fecha se obtiene del contenido
+del PDF. Solo se acepta el parte del día anterior en `Europe/Madrid`. El hash
+evita duplicados y `manifest.jsonl` conserva procedencia y revisiones. En esta
+fase el workflow no relanza el parser ni actualiza Chroma.
 
 ## Unidad documental
 

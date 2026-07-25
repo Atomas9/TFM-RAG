@@ -66,7 +66,20 @@ Las pruebas previstas para el parser de PDF comprobaran:
 - que no se llama al modelo sin documentos;
 - que pregunta, contexto y modelo se envian correctamente.
 
-La suite actual contiene 42 pruebas y se ejecuta con:
+`test_download_miteco_report.py` prueba sin acceder a Internet:
+
+- descubrimiento del enlace definitivo y resolución de URL relativas;
+- error explícito cuando el enlace no existe;
+- extracción de la fecha española desde un PDF real en memoria;
+- rechazo de firmas y tipos MIME inválidos;
+- escritura del PDF y del manifiesto;
+- idempotencia cuando se repite el mismo SHA-256;
+- sustitución y trazabilidad de revisiones del mismo día;
+- rechazo de un parte cuya fecha no es la esperada;
+- registro de nombres históricos sin duplicar el PDF;
+- revisión posterior de un archivo histórico ya registrado.
+
+La suite actual contiene 53 pruebas y se ejecuta con:
 
 ```bash
 python -m pytest -q

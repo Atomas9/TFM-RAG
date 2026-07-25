@@ -276,6 +276,9 @@ de referencia.
 
 En este momento están completadas:
 
+- descarga automática y versionada del parte definitivo diario de MITECO;
+- validación de firma, encabezado y fecha interna del PDF;
+- manifiesto de ingesta con URL, fecha, tamaño y SHA-256;
 - lectura y limpieza de PDF;
 - separación de incendios;
 - extracción de metadatos;
@@ -290,7 +293,7 @@ En este momento están completadas:
 - punto de entrada interactivo por terminal;
 - pruebas automatizadas del parser, retrieval y generador.
 
-La suite actual contiene 42 pruebas y puede ejecutarse con:
+La suite actual contiene 53 pruebas y puede ejecutarse con:
 
 ```bash
 python -m pytest -q
@@ -359,6 +362,7 @@ El diseño completo se encuentra en
 
 | Archivo | Responsabilidad |
 | --- | --- |
+| `src/miteco_rag/download_miteco_report.py` | Descarga, validación, deduplicación y manifiesto de los partes |
 | `src/miteco_rag/parseo_y_chuncking.py` | Lectura, parseo, snapshots y JSONL |
 | `src/miteco_rag/embeddings_chroma.py` | Embeddings e indexación |
 | `src/miteco_rag/query_filters.py` | Interpretación determinista de filtros |
@@ -370,6 +374,7 @@ El diseño completo se encuentra en
 | `CUADERNO_DE_BITACORA.md` | Registro diario detallado |
 | `docs/ARQUITECTURA.md` | Decisiones técnicas de arquitectura |
 | `docs/ARQUITECTURA_LANGGRAPH.md` | Workflow previsto con LLM y LangGraph |
+| `docs/INGESTA_AUTOMATICA_MITECO.md` | Automatización diaria y persistencia del corpus |
 
 ## 16. Cómo reconstruir el flujo actual
 

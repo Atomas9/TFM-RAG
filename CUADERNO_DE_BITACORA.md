@@ -561,3 +561,57 @@ generador de respuestas mediante Ollama Cloud.
 Definir el modelo Pydantic de intención con grupos lógicos y construir el
 revisor LLM que clasifique el dominio y evalúe la coherencia y suficiencia de
 los filtros deterministas.
+
+## 2026-07-25
+
+### Objetivo
+
+Automatizar la descarga del parte definitivo diario de MITECO para no depender
+de una descarga manual durante periodos de ausencia.
+
+### Trabajo realizado
+
+- Se creó `src/miteco_rag/download_miteco_report.py` como módulo independiente,
+  sin modificar los scripts del parser, embeddings, retrieval o generación.
+- El descargador descubre el enlace desde la página oficial en vez de fijar
+  directamente la URL del PDF.
+- Se añadió validación de firma, MIME, apertura con PyMuPDF, encabezado real y
+  fecha escrita en la primera página.
+- Se exige que el documento corresponda al día anterior según
+  `Europe/Madrid`; un enlace todavía desactualizado provoca un error visible.
+- Se implementó deduplicación por SHA-256, detección de revisiones y
+  compatibilidad con los nombres históricos ya existentes.
+- Se incorporó `manifest.jsonl` con procedencia, fecha, tamaño, hash y relación
+  con una versión previa.
+- Se creó `.github/workflows/download-miteco-report.yml` con ejecuciones a las
+  12:37 y 18:17, ejecución manual y commits mediante `github-actions[bot]`.
+- Se modificó `.gitignore` únicamente para versionar `data/raw/miteco`; los
+  datos procesados y Chroma continúan excluidos.
+- Se añadieron 11 pruebas unitarias sin red.
+- Se creó `docs/INGESTA_AUTOMATICA_MITECO.md` y se actualizaron README,
+  arquitectura, proceso, datos y documentación de pruebas.
+
+### Decisiones
+
+- Los PDF se guardarán inicialmente mediante commits normales del repositorio.
+- El workflow solo captura el documento fuente; no ejecuta todavía el parser,
+  los embeddings ni la actualización de Chroma.
+- Dos intentos diarios aportan tolerancia a publicaciones tardías y fallos
+  transitorios sin generar duplicados.
+- Los documentos nuevos usan una fecha ISO en el nombre. Los nombres antiguos
+  no se renombran para preservar las referencias existentes.
+- Si MITECO revisa un parte, se reemplaza el archivo de trabajo y Git conserva
+  la versión anterior en su historial.
+
+### Validación
+
+- 11 pruebas específicas del descargador superadas.
+- Descarga real validada contra MITECO en una carpeta temporal.
+- El documento detectado corresponde al 24 de julio de 2026 y su SHA-256 es
+  `f853390fb2103eb631679a5eb4bdf083b597cf3bf99ab683df05afa4dde37ca6`.
+
+### Siguiente paso
+
+Activar y observar el workflow en GitHub. Después se retomará el revisor LLM de
+los filtros deterministas; la conexión entre la descarga automática y el
+reprocesado del índice se decidirá en una fase posterior.

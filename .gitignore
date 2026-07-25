@@ -41,6 +41,8 @@ env/
 # Datos descargados, resultados e indices regenerables
 data/raw/**
 !data/raw/.gitkeep
+!data/raw/miteco/
+!data/raw/miteco/**
 data/processed/**
 !data/processed/.gitkeep
 data/chroma/**
@@ -51,4 +53,3 @@ models/
 # Artefactos de embeddings
 *.npy
 *.npz
-

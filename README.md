@@ -51,11 +51,18 @@ comprobaciones en pruebas pytest.
 El material previo utilizado como referencia se conserva en `extras`, pero no
 forma parte del codigo principal.
 
-El corpus local de trabajo contiene actualmente ocho partes. La maquina de
-estados delimita 48 bloques `Localizacion:`: 47 de Espana y uno de Portugal.
-Por decision del proyecto, el indice actual conserva los 48 registros,
-incluido el de Portugal. Los PDF, los resultados procesados y el indice local
-continuan fuera del control de versiones.
+La captura de nuevos partes está automatizada. El módulo independiente
+`src/miteco_rag/download_miteco_report.py` descubre el parte definitivo del día
+anterior, valida su contenido y fecha, calcula su SHA-256 y lo registra junto a
+un manifiesto. GitHub Actions lo ejecuta dos veces al día y crea un commit solo
+cuando hay un documento nuevo o una revisión.
+
+El corpus bruto contiene actualmente trece partes. La validación inicial del
+parser y el índice existente se realizaron sobre ocho de ellos: la maquina de
+estados delimitó 48 bloques `Localizacion:`, 47 de Espana y uno de Portugal.
+Por decision del proyecto, ese indice conserva los 48 registros, incluido el
+de Portugal. Los PDF originales de MITECO se versionan; los resultados
+procesados y el indice local continúan fuera del control de versiones.
 
 `snapshot_id` identifica de forma unica una observacion dentro de un parte.
 `incident_key` es una clave heuristica para agrupar observaciones que podrian
@@ -76,7 +83,7 @@ escritura solo se produce al ejecutar el archivo como programa.
 
 ## Arquitectura prevista
 
-1. Descarga y almacenamiento inmutable de los PDF de MITECO.
+1. Descarga automática, validación y versionado de los PDF de MITECO.
 2. Extraccion de texto por paginas con PyMuPDF.
 3. Parser basado en la estructura de los partes y en un estado persistente de
    comunidad y provincia.
@@ -96,9 +103,10 @@ La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTUR
 ├── tests/                      Pruebas automatizadas
 ├── notebooks/                  Apuntes y soluciones ejecutables paso a paso
 ├── data/
-│   ├── raw/                    PDF originales, no versionados
+│   ├── raw/miteco/             PDF originales y manifiesto versionados
 │   ├── processed/              Registros parseados, no versionados
 │   └── chroma/                 Indice vectorial local, no versionado
+├── .github/workflows/          Automatizacion diaria de la descarga
 ├── docs/                       Documentacion tecnica
 ├── extras/                     Codigo y documentos anteriores de referencia
 ├── CUADERNO_DE_BITACORA.md     Historial diario del proyecto
@@ -120,11 +128,23 @@ El repositorio esta preparado para macOS Intel. `requirements.txt` selecciona
 PyTorch 2.2.2 en esa plataforma y una version moderna de PyTorch en las
 plataformas que disponen de wheels compatibles.
 
-## Datos
+## Descarga automática y datos
 
-Los PDF descargados no se suben a Git. Deben guardarse en
-`data/raw/miteco/`. Consulta [data/README.md](data/README.md) para conocer las
-reglas del corpus.
+Los PDF de MITECO y su manifiesto sí se versionan en Git. Los resultados
+procesados y ChromaDB permanecen excluidos. El workflow
+`.github/workflows/download-miteco-report.yml` intenta obtener el parte
+definitivo a las 12:37 y 18:17, hora de Madrid, y también puede lanzarse
+manualmente desde GitHub.
+
+La descarga local se ejecuta con:
+
+```bash
+python src/miteco_rag/download_miteco_report.py
+```
+
+Consulta [docs/INGESTA_AUTOMATICA_MITECO.md](docs/INGESTA_AUTOMATICA_MITECO.md)
+para conocer la validación, el manifiesto, la idempotencia y las revisiones, y
+[data/README.md](data/README.md) para las reglas del corpus.
 
 Para reconstruir la salida procesada completa:
 
@@ -133,8 +153,9 @@ python src/miteco_rag/parseo_y_chuncking.py
 ```
 
 La implementacion actual vuelve a procesar todos los PDF y reemplaza los dos
-artefactos de `data/processed`. Tanto los PDF como las salidas procesadas estan
-excluidos de Git porque son datos regenerables.
+artefactos de `data/processed`. Las salidas procesadas permanecen excluidas de
+Git. Los PDF fuente se conservan en el repositorio porque no son artefactos
+regenerables del proyecto.
 
 ## Generar el indice vectorial
 
