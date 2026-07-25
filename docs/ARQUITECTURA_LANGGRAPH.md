@@ -179,20 +179,42 @@ para recuperar documentos ni llama al LLM.
 El parser determinista se mantiene porque es rápido, explicable, reproducible
 y fiable en los casos cubiertos por pruebas.
 
-### 6.2. `review_query_with_llm`
+### 6.2. `review_query_filters`
 
-Este nodo revisa simultáneamente:
+Este componente ya está implementado como función independiente en
+`revisor_query_filters.py`. Recibe la pregunta y el análisis determinista y
+devuelve un `FilterReview` validado:
 
-1. si la pregunta pertenece al dominio;
-2. si los filtros deterministas son coherentes;
-3. si son suficientes;
-4. qué correcciones o ampliaciones propone.
+```python
+class FilterReview(BaseModel):
+    action: Literal["keep", "extend", "replace", "clarify"]
+    coherent: bool
+    sufficient: bool
+    issues: list[str]
+    explanation: str
+```
 
-No será necesario utilizar un modelo distinto para revisar y para proponer
-filtros. Una misma llamada puede devolver ambos resultados con instrucciones y
-esquema específicos.
+El revisor no clasifica el dominio, no genera todavía los filtros corregidos y
+no consulta Chroma. Las cuatro acciones permiten conservar los filtros,
+ampliarlos, sustituir una interpretación incorrecta o pedir aclaración.
 
-La clasificación de dominio tendrá más de dos estados:
+Las pruebas reales iniciales cubrieron `keep`, `replace`, `clarify` y una
+consulta semántica con `where=null`. Quedan pendientes las pruebas
+automatizadas con Ollama y Chroma simulados, incluido el caso `extend`.
+
+### 6.3. `generate_filter_proposal`
+
+Se ejecutará únicamente para `extend` o `replace`. Devolverá una intención
+Pydantic con campos, operadores y grupos lógicos `AND/OR`; no escribirá
+directamente un diccionario libre de Chroma.
+
+El código determinista comprobará campos permitidos, tipos, fechas,
+contradicciones y valores antes de traducir la propuesta.
+
+### 6.4. `classify_domain`
+
+La clasificación de dominio se implementará como componente independiente del
+revisor de filtros:
 
 ```python
 Literal[
@@ -215,24 +237,7 @@ Ejemplos:
 Solo las preguntas claramente ajenas o fuera del alcance producirán un rechazo
 inmediato. Las inciertas podrán continuar o solicitar una aclaración.
 
-La revisión tendrá una salida conceptual como:
-
-```python
-class FilterReview(BaseModel):
-    domain: Domain
-    verdict: Literal[
-        "sufficient",
-        "incomplete",
-        "incorrect",
-        "ambiguous",
-    ]
-    missing_fields: list[str]
-    incorrect_fields: list[str]
-    explanation: str
-    proposed_intent: QueryIntent | None
-```
-
-### 6.3. `reject`
+### 6.5. `reject`
 
 Devuelve un mensaje predeterminado cuando la pregunta no está relacionada con
 el ámbito del RAG:
@@ -242,14 +247,14 @@ el ámbito del RAG:
 
 El texto definitivo se decidirá al implementar la interfaz.
 
-### 6.4. `clarify`
+### 6.6. `clarify`
 
 Solicita una aclaración cuando la pregunta admite interpretaciones
 incompatibles y no es seguro escoger una.
 
 No se utilizará la similitud semántica para ocultar una ambigüedad importante.
 
-### 6.5. `reconcile_and_validate_filters`
+### 6.7. `reconcile_and_validate_filters`
 
 Es un nodo determinista. Compara los filtros originales y la propuesta del LLM
 campo por campo.
@@ -312,7 +317,7 @@ where = build_chroma_where(resolved_filters.filters)
 
 El LLM nunca construye ni ejecuta directamente ese diccionario.
 
-### 6.6. `choose_retrieval_mode`
+### 6.8. `choose_retrieval_mode`
 
 Selecciona el tipo de recuperación según la intención de la pregunta:
 
@@ -338,7 +343,7 @@ Esto evita utilizar siempre `top_k`. Las preguntas sobre todos los registros,
 recuentos o evoluciones necesitan `collection.get()` o una recuperación
 específica, no únicamente vecinos semánticos.
 
-### 6.7. `retrieve_from_chroma`
+### 6.9. `retrieve_from_chroma`
 
 Ejecuta el plan validado:
 
@@ -349,7 +354,7 @@ Ejecuta el plan validado:
 El nodo registra el `where`, modo, número de resultados, IDs, distancias y
 metadatos devueltos.
 
-### 6.8. `evaluate_context`
+### 6.10. `evaluate_context`
 
 Evalúa el resultado antes de permitir la generación. Primero ejecutará
 comprobaciones deterministas y solo utilizará un LLM cuando sea necesario
@@ -392,7 +397,7 @@ Se solicitan varias entidades, pero el `top_k` no contiene todas. Antes de
 afirmar que una provincia carece de registros, se comprobará con `get()` o con
 consultas separadas.
 
-### 6.9. `replan_query`
+### 6.11. `replan_query`
 
 Solo se alcanza si:
 
@@ -411,7 +416,7 @@ Puede proponer:
 Después vuelve a `retrieve_from_chroma`. No puede iniciarse un tercer
 retrieval.
 
-### 6.10. `generate_answer`
+### 6.12. `generate_answer`
 
 Recibe la pregunta, los filtros finales y el contexto considerado suficiente.
 
@@ -424,13 +429,13 @@ La respuesta deberá:
 - reconocer explícitamente las limitaciones del corpus;
 - no afirmar inexistencia histórica a partir de una ausencia en `top_k`.
 
-### 6.11. `no_data_answer`
+### 6.13. `no_data_answer`
 
 Responde de forma controlada cuando una consulta exacta no tiene coincidencias.
 No necesita inventar una consulta más amplia ni presentar incendios de otra
 ubicación.
 
-### 6.12. `limited_answer`
+### 6.14. `limited_answer`
 
 Si el contexto sigue siendo insuficiente tras el segundo retrieval, el sistema
 se abstiene o responde solo la parte respaldada, explicando la limitación.
@@ -462,31 +467,36 @@ responder no_data    ¿queda reintento?       comprobar entidades
 La separación conceptual en nodos no implica utilizar un modelo diferente en
 cada uno.
 
-El primer diseño intentará reducir llamadas:
+El diseño mantiene funciones independientes para poder evaluarlas y
+reemplazarlas. No todas se ejecutan en todas las preguntas:
 
-1. una llamada para clasificación, revisión y propuesta de intención;
-2. una llamada opcional para evaluar o reformular un contexto difícil;
-3. una llamada para generar la respuesta.
+1. clasificación de dominio;
+2. revisión de filtros;
+3. propuesta de intención solo para `extend` o `replace`;
+4. evaluación o reformulación solo ante un contexto difícil;
+5. generación de la respuesta.
 
-Las preguntas fuera de dominio terminan tras la primera llamada. Las consultas
-simples no requieren reformulación.
+Las preguntas fuera de dominio terminan tras la clasificación. Las consultas
+con filtros válidos no llaman al generador de intención y las consultas simples
+no requieren reformulación. Más adelante se medirá si conviene combinar
+clasificación y revisión para reducir latencia y coste.
 
 ## 9. Ollama Cloud y validación
 
-Ollama Cloud es una opción adecuada para utilizar modelos que no caben en el
-equipo local. Sin embargo, su documentación actual indica que Cloud no
-garantiza Structured Outputs mediante JSON Schema.
+Ollama Cloud permite utilizar modelos que no caben en el equipo local. La
+primera implementación con `gemma4:31b-cloud` ha devuelto correctamente
+respuestas conforme al JSON Schema de `FilterReview`.
 
-La integración prevista será:
+La integración utiliza:
 
-1. solicitar JSON estricto en el prompt;
-2. utilizar temperatura baja;
-3. validar mediante `model_validate_json()`;
-4. permitir un intento controlado de reparación si el JSON es inválido;
-5. utilizar el parser determinista o devolver un error controlado si vuelve a
-   fallar.
+1. instrucciones explícitas y datos de entrada serializados como JSON;
+2. `format=FilterReview.model_json_schema()`;
+3. temperatura cero;
+4. validación mediante `model_validate_json()`.
 
-No se ha seleccionado todavía el modelo definitivo.
+Queda pendiente probar respuestas inválidas y decidir si se permitirá un único
+intento controlado de reparación antes de utilizar el parser determinista o
+devolver un error.
 
 ## 10. Persistencia y memoria
 
@@ -530,23 +540,27 @@ porcentaje de respuestas correctamente fundamentadas.
 
 No se implementará todo el grafo a la vez.
 
-1. Definir los modelos Pydantic de intención y revisión.
-2. Implementar el cliente LLM como función independiente.
-3. Probar validación, errores y reparación de JSON.
-4. Crear un conjunto inicial de preguntas de evaluación.
-5. Implementar la reconciliación determinista campo por campo.
-6. Añadir la selección de modo de retrieval.
-7. Construir `rag_graph.py` con los nodos ya probados.
-8. Añadir evaluación de contexto y un único reintento.
-9. Incorporar generación fundamentada.
-10. Evaluar persistencia conversacional posteriormente.
+1. ~~Definir el modelo Pydantic de revisión.~~
+2. ~~Implementar el revisor LLM como función independiente.~~
+3. Añadir pruebas simuladas para las cuatro acciones, JSON inválido y entrada
+   vacía.
+4. Definir la intención Pydantic con grupos lógicos.
+5. Implementar el generador LLM de filtros para `extend` y `replace`.
+6. Validar y reconciliar las propuestas mediante código determinista.
+7. Implementar el clasificador independiente de dominio.
+8. Crear un conjunto inicial de preguntas de evaluación.
+9. Corregir los imports internos y construir `rag_graph.py`.
+10. Añadir la selección de modo de retrieval.
+11. Añadir evaluación de contexto y un único reintento.
+12. Incorporar generación fundamentada.
+13. Evaluar persistencia conversacional posteriormente.
 
 ## 13. Decisiones pendientes
 
 Quedan por determinar mediante experimentación:
 
-- modelo concreto de Ollama Cloud;
-- prompt y esquema definitivos;
+- evaluación comparativa del modelo concreto de Ollama Cloud;
+- evolución del prompt y de los esquemas;
 - criterio para activar `clarify`;
 - umbral de mala similitud semántica;
 - tamaño inicial de `top_k`;

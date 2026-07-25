@@ -619,3 +619,70 @@ de una descarga manual durante periodos de ausencia.
 Activar y observar el workflow en GitHub. Después se retomará el revisor LLM de
 los filtros deterministas; la conexión entre la descarga automática y el
 reprocesado del índice se decidirá en una fase posterior.
+
+## 2026-07-25 — Revisor LLM de filtros
+
+### Objetivo
+
+Crear y comprobar como función independiente el LLM encargado de revisar si el
+análisis determinista de una pregunta es coherente y suficiente.
+
+### Trabajo realizado
+
+- Se creó `src/miteco_rag/revisor_query_filters.py`.
+- Se definió `FilterReview` con las acciones `keep`, `extend`, `replace` y
+  `clarify`.
+- El revisor utiliza `parse_metadata_filters()` para conservar filtros y
+  ambigüedades antes de construir el `where`.
+- El análisis determinista se serializa como JSON legible y se incorpora al
+  prompt junto con la pregunta.
+- Se redactó un system prompt que limita el nodo a revisar los filtros y
+  distingue búsquedas estructuradas de preguntas puramente semánticas.
+- Ollama recibe el JSON Schema de Pydantic, temperatura cero y la respuesta se
+  valida mediante `FilterReview.model_validate_json()`.
+- Se aclaró que `coherent` y `sufficient` son dimensiones independientes: un
+  filtro puede contener todas las entidades y relacionarlas incorrectamente.
+
+### Validación real
+
+Se realizaron cuatro llamadas con `gemma4:31b-cloud`:
+
+- `¿Qué incendios activos hay en León?` devolvió `keep`.
+- `¿Qué incendios ha habido en León y Andalucía?` devolvió `replace` y detectó
+  correctamente el `AND` imposible frente al `OR` solicitado.
+- `Incendios de León, pero no de León` devolvió `clarify`.
+- `¿Qué medios aéreos han participado en los incendios?` devolvió `keep` y
+  consideró correcto no utilizar filtros de metadatos.
+
+Una pregunta vacía produjo el `ValueError` esperado antes de llamar al modelo.
+El archivo compila correctamente.
+
+### Decisiones
+
+- El revisor no clasificará el dominio ni generará directamente un nuevo
+  `where`.
+- El clasificador de preguntas y el generador LLM de filtros se implementarán
+  como componentes independientes.
+- El corrector devolverá una intención Pydantic con grupos lógicos; Python
+  validará y traducirá la propuesta a Chroma.
+- LangGraph se incorporará cuando estas funciones se hayan probado de manera
+  aislada.
+
+### Pendiente
+
+- Crear `tests/test_revisor_query_filters.py` con Chroma y Ollama simulados.
+- Cubrir `keep`, `extend`, `replace`, `clarify`, JSON inválido y pregunta vacía.
+- Mantener aparte un conjunto de evaluación con llamadas reales para medir la
+  calidad del prompt.
+- Definir el esquema de intención con condiciones y grupos `AND/OR`.
+- Implementar el LLM que proponga filtros para `extend` y `replace`.
+- Implementar la validación, reconciliación y traducción deterministas.
+- Crear el decisor que clasifique si la pregunta pertenece al dominio de
+  incendios de MITECO.
+- Normalizar los imports internos antes de construir los nodos de LangGraph.
+
+### Próxima sesión
+
+Continuar con el generador LLM de filtros y el clasificador de dominio. Las
+pruebas automatizadas del revisor quedan registradas como deuda inmediata antes
+de integrar el grafo completo.

@@ -288,6 +288,7 @@ En este momento están completadas:
 - almacenamiento persistente en Chroma;
 - búsqueda semántica;
 - búsqueda híbrida con filtros deterministas;
+- revisión LLM estructurada de coherencia y suficiencia de filtros;
 - formateo del contexto recuperado;
 - generación fundamentada mediante `gemma4:31b-cloud`;
 - punto de entrada interactivo por terminal;
@@ -312,25 +313,31 @@ La versión actual todavía tiene varios límites:
 - una búsqueda sin resultados no siempre significa que un incendio no
   existiera, sino que no consta en los partes disponibles;
 - todavía no se ha calibrado un umbral de distancia semántica;
-- no existe todavía revisión LLM de filtros ni memoria conversacional;
+- el revisor LLM todavía no está integrado en el retrieval ni dispone de
+  pruebas automatizadas con dobles;
 - una provincia y una comunidad coordinadas como alternativas pueden
   combinarse incorrectamente con `$and`;
 - la identidad entre snapshots de días distintos sigue siendo heurística.
 
 ## 14. Siguiente fase: revisión de filtros y LangGraph
 
-La generación ya funciona. La siguiente etapa incorporará el revisor LLM de
-filtros y, después, un workflow controlado con LangGraph. Sus nodos combinarán
-código determinista y llamadas al modelo.
+La generación y el revisor LLM de filtros ya funcionan como componentes
+independientes. La siguiente etapa añadirá el generador LLM de intención, el
+clasificador de dominio y, después, un workflow controlado con LangGraph. Sus
+nodos combinarán código determinista y llamadas al modelo.
 
 El recorrido previsto será:
 
 ```text
+clasificación de dominio
+        ↓
 parser determinista
         ↓
-revisión de dominio y filtros mediante LLM
+revisión de filtros mediante LLM
         ↓
-reconciliación y validación campo por campo
+propuesta LLM cuando falten filtros o sean incorrectos
+        ↓
+reconciliación y validación determinista
         ↓
 selección del tipo de retrieval
         ↓
@@ -366,6 +373,7 @@ El diseño completo se encuentra en
 | `src/miteco_rag/parseo_y_chuncking.py` | Lectura, parseo, snapshots y JSONL |
 | `src/miteco_rag/embeddings_chroma.py` | Embeddings e indexación |
 | `src/miteco_rag/query_filters.py` | Interpretación determinista de filtros |
+| `src/miteco_rag/revisor_query_filters.py` | Revisión LLM estructurada de los filtros deterministas |
 | `src/miteco_rag/retrieval_chroma.py` | Implementación de retrieval desarrollada durante el aprendizaje |
 | `src/miteco_rag/extras/retrieval_chroma_solution.py` | Implementación de referencia |
 | `src/miteco_rag/augmented_generator.py` | Contexto y generación con Ollama |

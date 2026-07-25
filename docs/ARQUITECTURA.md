@@ -242,12 +242,17 @@ cumplen el filtro. Tampoco se ha incorporado busqueda lexica.
 
 El primer generador aumentado ya formatea los chunks y responde con Ollama
 Cloud. Aun no existe un evaluador de suficiencia posterior al retrieval ni un
-revisor LLM de los filtros.
+planificador de recuperación.
 
-La siguiente iteracion se orquestara como un workflow controlado con
-LangGraph. Mantendra el parser determinista y añadira una revision LLM que
-clasifique el dominio, compruebe si los filtros son suficientes y proponga
-correcciones estructuradas.
+El revisor LLM de filtros ya existe como función independiente. Devuelve un
+`FilterReview` estructurado que separa coherencia y suficiencia y decide entre
+`keep`, `extend`, `replace` y `clarify`. Todavía faltan sus pruebas
+automatizadas con dobles, el generador de intención para corregir filtros y el
+clasificador de dominio.
+
+La siguiente iteracion completara estos componentes antes de orquestarlos con
+LangGraph. El generador LLM devolverá condiciones y grupos lógicos validados,
+no un `where` libre.
 
 Un nodo determinista reconciliara ambas interpretaciones campo por campo,
 conservara la procedencia de cada filtro y construira el `where`. Otro nodo

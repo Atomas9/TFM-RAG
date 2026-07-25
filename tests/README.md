@@ -80,6 +80,20 @@ para probar la implementación de referencia:
 - registro de nombres históricos sin duplicar el PDF;
 - revisión posterior de un archivo histórico ya registrado.
 
+## Pruebas pendientes del revisor LLM
+
+Se creará `test_revisor_query_filters.py` con Ollama y Chroma simulados para
+comprobar:
+
+- las cuatro acciones `keep`, `extend`, `replace` y `clarify`;
+- la validación de una respuesta JSON inválida;
+- el rechazo de una pregunta vacía sin llamar al modelo;
+- la estructura del análisis determinista enviado en el prompt.
+
+Estas pruebas comprobarán el contrato Python sin red. La calidad del prompt se
+evaluará por separado mediante un conjunto pequeño de llamadas reales y
+resultados esperados.
+
 La suite actual contiene 53 pruebas y se ejecuta con:
 
 ```bash

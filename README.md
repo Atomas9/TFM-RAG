@@ -219,12 +219,25 @@ Las pruebas del analizador y de su integracion se ejecutan sin cargar el modelo:
 python -m pytest -q
 ```
 
+El primer revisor LLM de filtros está implementado en
+`src/miteco_rag/revisor_query_filters.py`. Compara la pregunta con los filtros,
+ambigüedades y `where` deterministas y devuelve un `FilterReview` estructurado
+con las acciones `keep`, `extend`, `replace` o `clarify`. Cuatro pruebas reales
+con `gemma4:31b-cloud` validaron filtros correctos, un `AND` geográfico
+incorrecto, una contradicción y una consulta puramente semántica.
+
 ## Siguiente fase
 
-El siguiente incremento añadira el revisor LLM de filtros. El parser
-determinista se conservara como linea base y el modelo comprobara si sus
-filtros son coherentes y suficientes. Las correcciones se validaran con
-Pydantic y se reconciliaran campo por campo antes de construir el `where`.
+Queda pendiente convertir las comprobaciones manuales del revisor en pruebas
+automatizadas con Ollama y Chroma simulados.
+
+El siguiente incremento definirá una intención con grupos lógicos y añadirá el
+LLM que proponga filtros cuando el revisor devuelva `extend` o `replace`. La
+propuesta se validará con Pydantic, se reconciliará campo por campo y se
+traducirá deterministicamente al `where` de Chroma.
+
+También se implementará de forma independiente el clasificador que decida si
+la pregunta pertenece al dominio de incendios de MITECO.
 
 Después, el workflow de LangGraph elegira entre recuperacion semantica,
 hibrida, exhaustiva, recuento o linea temporal. Tras consultar Chroma evaluara
@@ -263,6 +276,9 @@ Una explicación más narrativa y resumida de todo el proceso está disponible e
 
 La arquitectura acordada para el workflow con LLM y LangGraph se documenta en
 [docs/ARQUITECTURA_LANGGRAPH.md](docs/ARQUITECTURA_LANGGRAPH.md).
+
+La revisión del primer revisor LLM y sus pruebas pendientes se documenta en
+[docs/REVISION_REVISOR_QUERY_FILTERS.md](docs/REVISION_REVISOR_QUERY_FILTERS.md).
 
 La solucion comentada de la primera fase puede estudiarse y ejecutarse desde
 [notebooks/01_fase1_parseo_miteco.ipynb](notebooks/01_fase1_parseo_miteco.ipynb).
