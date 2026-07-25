@@ -590,6 +590,10 @@ de una descarga manual durante periodos de ausencia.
 - Se añadieron 11 pruebas unitarias sin red.
 - Se creó `docs/INGESTA_AUTOMATICA_MITECO.md` y se actualizaron README,
   arquitectura, proceso, datos y documentación de pruebas.
+- Se limpió el paquete principal moviendo el esqueleto educativo de fase 1 y
+  la solución de referencia del retrieval a `src/miteco_rag/extras/`.
+- La prueba de la solución de referencia se renombró a
+  `tests/test_retrieval_chroma_solution.py` y conserva sus cuatro casos.
 
 ### Decisiones
 

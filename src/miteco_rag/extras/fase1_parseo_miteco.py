@@ -1,4 +1,4 @@
-"""Fase 1: parseo de partes diarios de incendios de MITECO.
+"""Referencia educativa de la fase 1 de parseo de partes de MITECO.
 
 Objetivo de esta fase
 ---------------------
@@ -478,4 +478,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

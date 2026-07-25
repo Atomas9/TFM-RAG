@@ -52,7 +52,8 @@ Las pruebas previstas para el parser de PDF comprobaran:
 - contradicciones y consultas sin filtros;
 - la interfaz unificada `metadata_query(question, catalog)`.
 
-`test_retrieval_chroma.py` usa dobles del modelo y de la coleccion para probar:
+`test_retrieval_chroma_solution.py` usa dobles del modelo y de la coleccion
+para probar la implementación de referencia:
 
 - el embedding normalizado enviado a Chroma;
 - la presencia opcional de `where`;

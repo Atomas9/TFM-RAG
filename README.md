@@ -27,7 +27,7 @@ coleccion persistente `MITECO_fire_snapshots` de ChromaDB.
 
 La implementacion del alumno continua en `src/miteco_rag/retrieval_chroma.py`.
 La solucion de referencia para la recuperacion semantica e hibrida se conserva
-por separado en `src/miteco_rag/retrieval_chroma_solution.py`. El analizador
+por separado en `src/miteco_rag/extras/retrieval_chroma_solution.py`. El analizador
 determinista de `src/miteco_rag/query_filters.py` reconoce filtros incluidos y
 excluidos de pais, comunidad, provincia, localizacion, estado, situacion
 operativa y fecha del parte. Tambien distingue consultas presentes e
@@ -100,6 +100,7 @@ La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTUR
 ```text
 .
 ├── src/miteco_rag/             Codigo principal
+│   └── extras/                 Esqueletos y soluciones de referencia
 ├── tests/                      Pruebas automatizadas
 ├── notebooks/                  Apuntes y soluciones ejecutables paso a paso
 ├── data/
@@ -186,13 +187,13 @@ La demostracion incluida ejecuta una consulta semantica combinada con los
 filtros detectados:
 
 ```bash
-python src/miteco_rag/retrieval_chroma_solution.py
+PYTHONPATH=src python -m miteco_rag.extras.retrieval_chroma_solution
 ```
 
 Desde Python, con `src` incluido en `PYTHONPATH`:
 
 ```python
-from miteco_rag.retrieval_chroma_solution import retrieve_with_filters
+from miteco_rag.extras.retrieval_chroma_solution import retrieve_with_filters
 
 results, parsed_query, where = retrieve_with_filters(
     "Incendios activos en Leon",

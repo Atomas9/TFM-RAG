@@ -3,7 +3,10 @@
 import numpy as np
 import pytest
 
-from miteco_rag.retrieval_chroma_solution import retrieve, retrieve_with_filters
+from miteco_rag.extras.retrieval_chroma_solution import (
+    retrieve,
+    retrieve_with_filters,
+)
 
 
 SAMPLE_METADATA = {

@@ -5,9 +5,9 @@ Fecha de revision: 2026-07-22.
 Archivos revisados:
 
 - `src/miteco_rag/query_filters.py`;
-- `src/miteco_rag/retrieval_chroma_solution.py`;
+- `src/miteco_rag/extras/retrieval_chroma_solution.py`;
 - `tests/test_query_filters.py`;
-- `tests/test_retrieval_chroma.py`;
+- `tests/test_retrieval_chroma_solution.py`;
 - coleccion local `MITECO_fire_snapshots`.
 
 ## Estado alcanzado

@@ -367,7 +367,7 @@ El diseño completo se encuentra en
 | `src/miteco_rag/embeddings_chroma.py` | Embeddings e indexación |
 | `src/miteco_rag/query_filters.py` | Interpretación determinista de filtros |
 | `src/miteco_rag/retrieval_chroma.py` | Implementación de retrieval desarrollada durante el aprendizaje |
-| `src/miteco_rag/retrieval_chroma_solution.py` | Implementación de referencia |
+| `src/miteco_rag/extras/retrieval_chroma_solution.py` | Implementación de referencia |
 | `src/miteco_rag/augmented_generator.py` | Contexto y generación con Ollama |
 | `src/miteco_rag/main.py` | Punto de entrada del MVP |
 | `tests/` | Pruebas automatizadas |

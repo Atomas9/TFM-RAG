@@ -179,8 +179,8 @@ La consulta se divide en dos modulos:
 - `query_filters.py` interpreta la pregunta sin abrir Chroma ni cargar el
   modelo;
 - `retrieval_chroma.py` conserva la implementacion en desarrollo del alumno;
-- `retrieval_chroma_solution.py` muestra como generar el embedding y ejecutar
-  `collection.query()` con el `where` construido.
+- `extras/retrieval_chroma_solution.py` conserva como referencia cómo generar
+  el embedding y ejecutar `collection.query()` con el `where` construido.
 
 El analizador produce primero un `ParsedQuery` que conserva:
 

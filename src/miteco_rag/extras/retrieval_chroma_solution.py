@@ -10,7 +10,7 @@ from sentence_transformers import SentenceTransformer
 
 try:
     # Importacion usada al ejecutar el modulo como paquete.
-    from .query_filters import (
+    from ..query_filters import (
         MetadataCatalog,
         ParsedQuery,
         build_chroma_where,
