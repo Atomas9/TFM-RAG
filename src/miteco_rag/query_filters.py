@@ -341,6 +341,9 @@ class _EntityMatch:
     start: int
     end: int
 
+class DeterministicAnalysis(BaseModel):
+    parsed_query: ParsedQuery
+    deterministic_where: dict[str, object] | None
 
 NEGATION_BEFORE_ENTITY = re.compile(
     r"(?:"
@@ -983,3 +986,24 @@ def _find_filter_contradictions(
             ambiguities.append(
                 f"El valor {value!r} aparece incluido y excluido como {label}."
             )
+
+def build_deterministic_analysis(
+    query: str,
+    catalog: MetadataCatalog,
+) -> DeterministicAnalysis:
+    parsed_query = parse_metadata_filters(
+        query,
+        catalog,
+    )
+
+    if parsed_query.ambiguities:
+        deterministic_where = None
+    else:
+        deterministic_where = build_chroma_where(
+            parsed_query.filters
+        )
+
+    return DeterministicAnalysis(
+        parsed_query=parsed_query,
+        deterministic_where=deterministic_where,
+    )

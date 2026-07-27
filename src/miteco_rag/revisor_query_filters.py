@@ -1,8 +1,7 @@
 import ollama
 import json
 
-from query_filters import MetadataCatalog, metadata_query, build_chroma_where, parse_metadata_filters
-from retrieval_chroma import load_chroma_collection
+from query_filters import DeterministicAnalysis
 
 from typing import Literal
 from pydantic import BaseModel, Field
@@ -187,24 +186,12 @@ Análisis determinista:
 '''.strip()
 
 
-def revisor(query: str, model_name: str = OLLAMA_MODEL) -> FilterReview:
+def revisor(query: str, analysis: DeterministicAnalysis,  model_name: str = OLLAMA_MODEL) -> FilterReview:
     if not query.strip():
         raise ValueError('La pregunta no puede estar vacía')
 
-    db_collection = load_chroma_collection()
-
-    records = db_collection.get(
-        include = ['metadatas']
-    )
-
-    catalog = MetadataCatalog.from_metadatas(records['metadatas'])
-
-    parsed_query = parse_metadata_filters(query, catalog)
-
-    if parsed_query.ambiguities:
-        where = None
-    else:
-        where = build_chroma_where(parsed_query.filters)
+    parsed_query = analysis.parsed_query
+    where = analysis.deterministic_where
     
     deterministic_analysis = json.dumps(
         {
@@ -243,14 +230,4 @@ def revisor(query: str, model_name: str = OLLAMA_MODEL) -> FilterReview:
 
     return review
 
-def main() -> None:
-    query = input('Escribe tu pregunta: ')
-    answer = revisor(query)
-
-    print('\nRespuesta:\n')
-    print(answer)
-
-
-if __name__ == '__main__':
-    main()
 
