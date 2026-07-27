@@ -289,6 +289,8 @@ En este momento están completadas:
 - búsqueda semántica;
 - búsqueda híbrida con filtros deterministas;
 - revisión LLM estructurada de coherencia y suficiencia de filtros;
+- carga única del modelo de embeddings, la colección y el catálogo;
+- análisis determinista reutilizable mediante `DeterministicAnalysis`;
 - formateo del contexto recuperado;
 - generación fundamentada mediante `gemma4:31b-cloud`;
 - punto de entrada interactivo por terminal;
@@ -313,18 +315,21 @@ La versión actual todavía tiene varios límites:
 - una búsqueda sin resultados no siempre significa que un incendio no
   existiera, sino que no consta en los partes disponibles;
 - todavía no se ha calibrado un umbral de distancia semántica;
-- el revisor LLM todavía no está integrado en el retrieval ni dispone de
-  pruebas automatizadas con dobles;
+- el revisor se ejecuta desde `main.py`, pero su acción todavía no decide el
+  filtro final ni dispone de pruebas automatizadas con dobles;
 - una provincia y una comunidad coordinadas como alternativas pueden
   combinarse incorrectamente con `$and`;
 - la identidad entre snapshots de días distintos sigue siendo heurística.
 
 ## 14. Siguiente fase: revisión de filtros y LangGraph
 
-La generación y el revisor LLM de filtros ya funcionan como componentes
-independientes. La siguiente etapa añadirá el generador LLM de intención, el
-clasificador de dominio y, después, un workflow controlado con LangGraph. Sus
-nodos combinarán código determinista y llamadas al modelo.
+La generación de respuestas y el revisor LLM ya funcionan como componentes
+independientes. El generador LLM de nuevos filtros dispone de un esquema
+Pydantic inicial, pero todavía no tiene prompt ni contrato de entrada
+terminados y conserva imports anteriores a la refactorización. La siguiente
+etapa lo completará para las acciones `extend` y `replace`, añadirá la
+reconciliación determinista y, posteriormente, el clasificador de dominio y un
+workflow controlado con LangGraph.
 
 El recorrido previsto será:
 
@@ -372,8 +377,10 @@ El diseño completo se encuentra en
 | `src/miteco_rag/download_miteco_report.py` | Descarga, validación, deduplicación y manifiesto de los partes |
 | `src/miteco_rag/parseo_y_chuncking.py` | Lectura, parseo, snapshots y JSONL |
 | `src/miteco_rag/embeddings_chroma.py` | Embeddings e indexación |
+| `src/miteco_rag/core.py` | Carga única del modelo, la colección y el catálogo |
 | `src/miteco_rag/query_filters.py` | Interpretación determinista de filtros |
 | `src/miteco_rag/revisor_query_filters.py` | Revisión LLM estructurada de los filtros deterministas |
+| `src/miteco_rag/generate_filter_LLM.py` | Esqueleto del generador LLM de propuestas de filtros |
 | `src/miteco_rag/retrieval_chroma.py` | Implementación de retrieval desarrollada durante el aprendizaje |
 | `src/miteco_rag/extras/retrieval_chroma_solution.py` | Implementación de referencia |
 | `src/miteco_rag/augmented_generator.py` | Contexto y generación con Ollama |
@@ -399,3 +406,37 @@ Para validar el proyecto:
 ```bash
 python -m pytest -q
 ```
+
+## 17. Refactorización del flujo por consulta
+
+La primera versión cargaba el modelo de embeddings, abría Chroma, reconstruía
+el catálogo e interpretaba los filtros desde varias funciones. Esto hacía
+difícil seguir qué objeto pertenecía a cada fase y repetía operaciones
+costosas.
+
+La carga se centralizó en `core.loader()`:
+
+```python
+emb_model, collection, catalog = loader()
+```
+
+Estos tres recursos se mantienen durante la ejecución. Para cada nueva
+pregunta se construye una sola vez:
+
+```python
+analysis = build_deterministic_analysis(query, catalog)
+```
+
+`DeterministicAnalysis` conserva:
+
+- `parsed_query`, con texto original y normalizado, filtros y ambigüedades;
+- `deterministic_where`, con el diccionario para Chroma o `None`.
+
+El revisor recibe el objeto completo y ya no carga Chroma ni reconstruye el
+catálogo. El retrieval recibe el modelo, la colección y el filtro final como
+dependencias. `main.py` actúa como orquestador de estas fases.
+
+La trazabilidad estructurada se ha discutido, pero se implementará más
+adelante. Se separará el historial conversacional de los eventos técnicos del
+pipeline; estos últimos podrán registrarse como JSONL por `run_id` sin
+incorporarlos a los mensajes enviados al generador de respuestas.

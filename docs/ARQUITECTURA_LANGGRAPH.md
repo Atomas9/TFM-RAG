@@ -544,8 +544,9 @@ No se implementará todo el grafo a la vez.
 2. ~~Implementar el revisor LLM como función independiente.~~
 3. Añadir pruebas simuladas para las cuatro acciones, JSON inválido y entrada
    vacía.
-4. Definir la intención Pydantic con grupos lógicos.
-5. Implementar el generador LLM de filtros para `extend` y `replace`.
+4. Completar la intención Pydantic ya iniciada con condiciones y grupos
+   lógicos.
+5. Terminar el generador LLM de filtros para `extend` y `replace`.
 6. Validar y reconciliar las propuestas mediante código determinista.
 7. Implementar el clasificador independiente de dominio.
 8. Crear un conjunto inicial de preguntas de evaluación.
@@ -567,6 +568,11 @@ Quedan por determinar mediante experimentación:
 - política de recuperación por cada entidad solicitada;
 - formato final de citas;
 - almacenamiento de trazas y resultados de evaluación.
+
+Se ha acordado aplazar la implementación de trazabilidad. Cuando se aborde, el
+historial conversacional permanecerá en `messages`, mientras que las
+decisiones técnicas de cada fase se registrarán por separado, previsiblemente
+como eventos JSONL asociados a un `run_id`.
 
 ## 14. Referencias
 

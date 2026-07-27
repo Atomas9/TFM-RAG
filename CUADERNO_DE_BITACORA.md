@@ -686,3 +686,81 @@ El archivo compila correctamente.
 Continuar con el generador LLM de filtros y el clasificador de dominio. Las
 pruebas automatizadas del revisor quedan registradas como deuda inmediata antes
 de integrar el grafo completo.
+
+## 2026-07-27 — Refactorización del flujo de consulta
+
+### Objetivo
+
+Evitar que el modelo de embeddings, Chroma, el catálogo y el análisis
+determinista se carguen o calculen repetidamente en cada componente.
+
+### Trabajo realizado
+
+- Se creó `src/miteco_rag/core.py`.
+- `core.loader()` carga una sola vez `BAAI/bge-m3`, la colección
+  `MITECO_fire_snapshots` y el `MetadataCatalog`.
+- Se añadió `DeterministicAnalysis` para agrupar el `ParsedQuery` y el
+  `deterministic_where`.
+- Se añadió `build_deterministic_analysis(query, catalog)` para interpretar
+  cada pregunta una sola vez.
+- `revisor_query_filters.py` dejó de abrir Chroma, reconstruir el catálogo y
+  repetir el análisis determinista.
+- `retrieval_chroma.py` dejó de cargar recursos internamente y ahora recibe el
+  modelo, la colección y el `where`.
+- `main.py` pasó a actuar como orquestador del flujo refactorizado.
+- Se definieron tipos de retorno y parámetros para `loader()` y `retrieve()`.
+- Se verificó el retrieval con dobles de modelo y colección y el flujo de
+  `main.py` con dependencias simuladas.
+
+### Validación
+
+- Los módulos refactorizados compilan correctamente.
+- La suite completa supera 53 pruebas.
+- La prueba integrada simulada recorrió carga, análisis, revisión, retrieval,
+  construcción de contexto y generación de respuesta.
+- `core.py`, `query_filters.py`, `revisor_query_filters.py`,
+  `retrieval_chroma.py`, `augmented_generator.py` y `main.py` se importan
+  correctamente.
+
+### Estado del generador de filtros
+
+`src/miteco_rag/generate_filter_LLM.py` está a medio implementar. Ya contiene
+los modelos iniciales `FilterCondition`, `FilterGroup` y `FilterProposal`, pero
+faltan:
+
+- adaptar su entrada para reutilizar `DeterministicAnalysis`;
+- eliminar imports anteriores a la refactorización;
+- redactar los prompts;
+- serializar la pregunta, el análisis, la revisión y el catálogo necesario;
+- validar y traducir la propuesta antes de usarla como filtro;
+- conectar las rutas `extend` y `replace`.
+
+Actualmente el archivo conserva un import de `load_chroma_collection` desde
+`retrieval_chroma.py`, función que ahora reside en `core.py`. Como el generador
+no debe consultar Chroma directamente, ese import deberá eliminarse.
+
+### Decisiones
+
+- El revisor recibe el análisis ya calculado y no conoce cómo se cargaron los
+  recursos.
+- El retrieval recibe todas sus dependencias y se limita a generar el
+  embedding de la pregunta y consultar Chroma.
+- `deterministic_where` se conserva como nombre para distinguirlo del futuro
+  `llm_where` o `final_where`.
+- La trazabilidad del pipeline es conveniente, pero se aplaza hasta completar
+  el generador de filtros.
+- El futuro historial de conversación se guardará en `messages`; las trazas
+  técnicas se mantendrán separadas y no se enviarán al LLM de respuesta.
+
+### Pendiente para la próxima sesión
+
+1. Terminar `generate_filter_LLM.py`.
+2. Definir su contrato con `DeterministicAnalysis`, `FilterReview` y catálogo.
+3. Eliminar imports obsoletos y comprobar que el módulo se puede importar.
+4. Construir el prompt y validar la salida `FilterProposal`.
+5. Diseñar la traducción y reconciliación determinista del filtro propuesto.
+6. Hacer que `review.action` gobierne las rutas `keep`, `extend`, `replace` y
+   `clarify`.
+
+La trazabilidad estructurada y el clasificador de dominio quedan para sesiones
+posteriores.

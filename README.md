@@ -226,15 +226,27 @@ con las acciones `keep`, `extend`, `replace` o `clarify`. Cuatro pruebas reales
 con `gemma4:31b-cloud` validaron filtros correctos, un `AND` geográfico
 incorrecto, una contradicción y una consulta puramente semántica.
 
+El flujo se ha refactorizado para cargar una sola vez los recursos constantes
+de una ejecución. `src/miteco_rag/core.py` devuelve el modelo de embeddings, la
+colección de Chroma y el catálogo de metadatos. Para cada pregunta,
+`build_deterministic_analysis()` produce un único `DeterministicAnalysis` con
+el `ParsedQuery` y su `deterministic_where`; este objeto se reutiliza en el
+revisor y evita reconstruir el catálogo o interpretar varias veces la misma
+consulta. `retrieval_chroma.py` recibe ahora el modelo, la colección y el
+filtro ya preparados.
+
 ## Siguiente fase
 
 Queda pendiente convertir las comprobaciones manuales del revisor en pruebas
 automatizadas con Ollama y Chroma simulados.
 
-El siguiente incremento definirá una intención con grupos lógicos y añadirá el
-LLM que proponga filtros cuando el revisor devuelva `extend` o `replace`. La
-propuesta se validará con Pydantic, se reconciliará campo por campo y se
-traducirá deterministicamente al `where` de Chroma.
+`src/miteco_rag/generate_filter_LLM.py` contiene por ahora el esquema inicial
+de condiciones y grupos lógicos, pero está a medio implementar y no forma
+parte todavía del flujo ejecutable. La próxima sesión completará el prompt, la
+entrada basada en `DeterministicAnalysis` y `FilterReview`, la respuesta
+estructurada y la limpieza de imports. Después, la propuesta se validará con
+Pydantic, se reconciliará campo por campo y se traducirá deterministicamente
+al `where` de Chroma.
 
 También se implementará de forma independiente el clasificador que decida si
 la pregunta pertenece al dominio de incendios de MITECO.
@@ -254,7 +266,9 @@ python src/miteco_rag/main.py
 
 El programa solicita una pregunta, recupera hasta diez chunks y muestra la
 respuesta fundamentada. La primera ejecución del embedding puede tardar por la
-carga de BGE-M3.
+carga de BGE-M3. En el estado transitorio actual se ejecuta el revisor, pero su
+acción todavía no modifica el filtro de retrieval: hasta completar el
+generador, Chroma recibe el `deterministic_where`.
 
 ## Alcance inicial
 

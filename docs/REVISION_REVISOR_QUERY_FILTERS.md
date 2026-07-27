@@ -9,13 +9,16 @@ no responde la pregunta y no genera todavía un nuevo `where`.
 
 ## Entrada
 
-La función `revisor()` recibe una pregunta y construye:
+La función `revisor()` recibe:
 
-- el catálogo de metadatos de la colección;
-- el `ParsedQuery` determinista;
-- los filtros estructurados detectados;
-- las ambigüedades;
-- el `where` de Chroma, cuando puede construirse.
+- la pregunta del usuario;
+- un `DeterministicAnalysis` ya construido para esa pregunta.
+
+El análisis contiene el `ParsedQuery`, sus filtros estructurados, las
+ambigüedades y el `deterministic_where`. El revisor ya no abre Chroma, no
+reconstruye el catálogo y no vuelve a ejecutar el parser. Esta separación
+permite calcular una sola vez la interpretación determinista y reutilizarla en
+las fases posteriores.
 
 El análisis se serializa como JSON legible mediante `json.dumps()`. Se utiliza
 `ensure_ascii=False` para conservar tildes y `indent=2` para facilitar la
@@ -90,3 +93,17 @@ prompt y de las decisiones del modelo.
 El LLM corrector no escribirá directamente un diccionario libre de Chroma. Su
 propuesta será validada con Pydantic y traducida deterministicamente al
 `where` final.
+
+## Refactorización de recursos
+
+`core.loader()` centraliza la carga del modelo `BAAI/bge-m3`, la colección
+persistente de Chroma y el `MetadataCatalog`. `main.py` construye después:
+
+```python
+analysis = build_deterministic_analysis(query, catalog)
+review = revisor(query, analysis)
+```
+
+El resultado del revisor todavía no gobierna el retrieval. Mientras no se
+complete el generador y la reconciliación, Chroma utiliza
+`analysis.deterministic_where`.
