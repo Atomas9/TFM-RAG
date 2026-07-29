@@ -1,6 +1,7 @@
 import ollama
 import json
 
+from datetime import datetime
 from revisor_query_filters import FilterReview
 from query_filters import DeterministicAnalysis, MetadataCatalog
 
@@ -297,3 +298,129 @@ def generate_filter_llm(
     
     
     return proposal
+
+
+def condition_to_chroma(
+    condition: FilterCondition,
+) -> dict[str, object]:
+    """Valida y traduce una condición propuesta a la sintaxis de Chroma."""
+
+    operator = condition.operator
+    value = condition.value
+
+    if operator in {"in", "nin"}:
+        if not isinstance(value, list):
+            raise ValueError(
+                f"El operador {operator!r} necesita una lista."
+            )
+        if not value:
+            raise ValueError(
+                f"El operador {operator!r} no admite una lista vacía."
+            )
+    elif isinstance(value, list):
+        raise ValueError(
+            f"El operador {operator!r} necesita un valor escalar."
+        )
+
+    if operator in {"gte", "lte"} and condition.field != "report_date_number":
+        raise ValueError(
+            f"El operador {operator!r} solo puede utilizarse con "
+            "'report_date_number'."
+        )
+
+    if condition.field == "report_date_number":
+        date_values = value if isinstance(value, list) else [value]
+
+        for date_value in date_values:
+            if (
+                type(date_value) is not int
+                or len(str(date_value)) != 8
+            ):
+                raise ValueError(
+                    "'report_date_number' debe contener enteros "
+                    "de ocho cifras con formato YYYYMMDD."
+                )
+
+            try:
+                datetime.strptime(str(date_value), "%Y%m%d")
+            except ValueError as error:
+                raise ValueError(
+                    f"Fecha de parte no válida: {date_value!r}."
+                ) from error
+
+    if operator == "eq":
+        return {condition.field: value}
+
+    chroma_operators = {
+        "ne": "$ne",
+        "in": "$in",
+        "nin": "$nin",
+        "gte": "$gte",
+        "lte": "$lte",
+    }
+
+    return {
+        condition.field: {
+            chroma_operators[operator]: value
+        }
+    }
+
+
+def group_to_chroma(
+    group: FilterGroup,
+) -> dict[str, object]:
+    """Traduce un grupo de condiciones unido mediante AND u OR."""
+
+    conditions = [
+        condition_to_chroma(condition)
+        for condition in group.conditions
+    ]
+
+    if len(conditions) == 1:
+        return conditions[0]
+
+    return {
+        f"${group.logic}": conditions
+    }
+
+
+def proposal_to_chroma_where(
+    proposal: FilterProposal,
+) -> dict[str, object] | None:
+    """Convierte una propuesta completa en un ``where`` de Chroma."""
+
+    groups = [
+        group_to_chroma(group)
+        for group in proposal.groups
+    ]
+
+    if not groups:
+        return None
+    if len(groups) == 1:
+        return groups[0]
+
+    return {"$and": groups}
+
+
+def resolve_final_where(
+    analysis: DeterministicAnalysis,
+    review: FilterReview,
+    proposal: FilterProposal | None = None,
+) -> dict[str, object] | None:
+    """Selecciona el filtro final según la decisión del revisor."""
+
+    if review.action == "keep":
+        return analysis.deterministic_where
+
+    if review.action == "clarify":
+        details = " ".join(review.issues)
+        raise ValueError(
+            f"La consulta necesita una aclaración. {details}".strip()
+        )
+
+    if proposal is None:
+        raise ValueError(
+            f"La acción {review.action!r} necesita una propuesta de filtros."
+        )
+
+    return proposal_to_chroma_where(proposal)

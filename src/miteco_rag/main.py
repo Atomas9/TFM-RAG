@@ -1,7 +1,7 @@
 from core import loader
 from query_filters import build_deterministic_analysis
 from revisor_query_filters import revisor
-from generate_filter_LLM import generate_filter_llm
+from generate_filter_LLM import generate_filter_llm, resolve_final_where
 from retrieval_chroma import retrieve
 from augmented_generator import generate_context, generate_answer 
 
@@ -18,6 +18,7 @@ def main() -> None:
     review = revisor(query, analysis)
     if review.action in {'extend', 'replace'}:
         proposal = generate_filter_llm(query, analysis, review, catalog)
+        where =  resolve_final_where(analysis, review, proposal)
 
     raw_context = retrieve(query, emb_model, collection, where, top_k = 10)
     context = generate_context(raw_context)
