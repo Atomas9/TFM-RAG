@@ -204,17 +204,31 @@ automatizadas con Ollama y Chroma simulados, incluido el caso `extend`.
 
 ### 6.3. `generate_filter_proposal`
 
-Se ejecutará únicamente para `extend` o `replace`. Devolverá una intención
-Pydantic con campos, operadores y grupos lógicos `AND/OR`; no escribirá
-directamente un diccionario libre de Chroma.
+Está implementado como función independiente y se ejecuta únicamente para
+`extend` o `replace`. Devuelve una intención Pydantic con campos, operadores y
+grupos lógicos `AND/OR`; no escribe directamente un diccionario libre de
+Chroma.
 
-El código determinista comprobará campos permitidos, tipos, fechas,
-contradicciones y valores antes de traducir la propuesta.
+El código determinista ya comprueba campos permitidos, compatibilidad básica
+entre operadores y valores, y fechas, y traduce condiciones y grupos al
+`where`. Quedan pendientes la validación completa contra catálogo, los
+duplicados y las contradicciones internas.
 
 ### 6.4. `classify_domain`
 
-La clasificación de dominio se implementará como componente independiente del
-revisor de filtros:
+La primera versión se ha implementado en `bouncer.py` como componente
+independiente del revisor mediante una decisión binaria:
+
+```python
+Literal["GO", "NO GO"]
+```
+
+`GO` permite continuar y `NO GO` devuelve un rechazo predeterminado. El prompt
+evalúa la intención principal y no acepta palabras aisladas como prueba de
+pertenencia al dominio.
+
+Una versión posterior podrá sustituir esta decisión por la taxonomía más rica
+prevista originalmente:
 
 ```python
 Literal[
@@ -544,11 +558,10 @@ No se implementará todo el grafo a la vez.
 2. ~~Implementar el revisor LLM como función independiente.~~
 3. Añadir pruebas simuladas para las cuatro acciones, JSON inválido y entrada
    vacía.
-4. Completar la intención Pydantic ya iniciada con condiciones y grupos
-   lógicos.
-5. Terminar el generador LLM de filtros para `extend` y `replace`.
-6. Validar y reconciliar las propuestas mediante código determinista.
-7. Implementar el clasificador independiente de dominio.
+4. ~~Completar la intención Pydantic con condiciones y grupos lógicos.~~
+5. ~~Implementar el generador LLM de filtros para `extend` y `replace`.~~
+6. Ampliar la validación y reconciliación deterministas de las propuestas.
+7. ~~Implementar la primera versión binaria del clasificador de dominio.~~
 8. Crear un conjunto inicial de preguntas de evaluación.
 9. Corregir los imports internos y construir `rag_graph.py`.
 10. Añadir la selección de modo de retrieval.

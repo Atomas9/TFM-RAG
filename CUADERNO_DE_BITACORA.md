@@ -764,3 +764,77 @@ no debe consultar Chroma directamente, ese import deberá eliminarse.
 
 La trazabilidad estructurada y el clasificador de dominio quedan para sesiones
 posteriores.
+
+## 2026-07-29 — Filtro final LLM y bouncer
+
+### Objetivo
+
+Completar la corrección de filtros para `extend` y `replace` y añadir una
+primera barrera que impida ejecutar el RAG con preguntas ajenas al dominio.
+
+### Trabajo realizado
+
+- Se completó el prompt de `generate_filter_LLM.py`.
+- El generador recibe la pregunta, `DeterministicAnalysis`, `FilterReview` y
+  valores canónicos del catálogo.
+- Se definió `FilterProposal` mediante condiciones y grupos lógicos.
+- Se añadieron `condition_to_chroma()`, `group_to_chroma()` y
+  `proposal_to_chroma_where()`.
+- Se añadió `resolve_final_where()` para conservar el filtro determinista en
+  `keep` y utilizar la propuesta completa en `extend` y `replace`.
+- Se validan operadores escalares y de lista, listas vacías, rangos y fechas
+  reales de ocho cifras `YYYYMMDD`.
+- `main.py` utiliza el nuevo filtro antes del retrieval.
+- La ruta `clarify` muestra los problemas y termina el flujo.
+- Se creó `bouncer.py` con una decisión Pydantic binaria `GO`/`NO GO`.
+- El bouncer se conectó antes del análisis determinista.
+- El prompt del bouncer se corrigió para exigir objetos JSON y clasificar la
+  intención, no palabras clave aisladas.
+
+### Pruebas y resultados
+
+- El revisor clasificó `¿Qué incendios ha habido en León y Andalucía?` como
+  `replace`.
+- El generador propuso un OR entre provincia León y comunidad Andalucía.
+- El traductor produjo un `where` válido que Chroma aceptó y que devolvió siete
+  snapshots.
+- Se comprobaron condiciones con uno y varios grupos, `keep`, `replace`,
+  `clarify`, operadores incompatibles y fechas inválidas.
+- Los módulos compilan y se importan correctamente.
+- La suite completa mantiene 53 pruebas superadas.
+
+### Incidencias
+
+- Ollama Cloud devolvió inicialmente `NO GO` como texto plano aunque se había
+  enviado un JSON Schema mediante `format`.
+- La documentación oficial indica que Ollama Cloud no soporta actualmente
+  structured outputs.
+- Se corrigieron todos los ejemplos del prompt para mostrar
+  `{"decision": "GO"}` o `{"decision": "NO GO"}`.
+- La consulta `¿Qué hora es? Fuego` superó inicialmente el clasificador porque
+  el prompt daba demasiado peso a la palabra `fuego`. Se añadieron reglas y
+  ejemplos para evaluar la intención principal y rechazar palabras aisladas.
+
+### Decisiones
+
+- El LLM propone una intención estructurada, pero Python construye el `where`.
+- La propuesta de `extend` y `replace` representa el filtro completo; no se
+  combina a ciegas con el filtro determinista.
+- Se conserva `format` para compatibilidad con backends que sí soportan
+  structured outputs y Pydantic valida siempre la respuesta.
+- La primera versión del bouncer será binaria. Una taxonomía más detallada
+  podrá incorporarse con LangGraph si la evaluación demuestra que hace falta.
+
+### Pendiente para la próxima sesión
+
+1. Crear pruebas automatizadas del bouncer, revisor, generador y traductor.
+2. Definir una recuperación controlada ante JSON inválido o texto plano de
+   Ollama Cloud.
+3. Validar valores del LLM contra el catálogo y detectar contradicciones.
+4. Mover `loader()` después del `GO` para no cargar BGE-M3 y Chroma en
+   preguntas rechazadas.
+5. Limpiar el bloque de depuración comentado de `main.py`.
+6. Comenzar la integración con LangGraph cuando los contratos estén cubiertos
+   por pruebas.
+
+Se mantiene aplazada la trazabilidad estructurada del pipeline.

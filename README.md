@@ -235,21 +235,27 @@ revisor y evita reconstruir el catálogo o interpretar varias veces la misma
 consulta. `retrieval_chroma.py` recibe ahora el modelo, la colección y el
 filtro ya preparados.
 
+El generador de filtros LLM ya está conectado para las acciones `extend` y
+`replace`. Devuelve un `FilterProposal` validado con Pydantic, formado por
+condiciones y grupos lógicos `AND/OR`. Python valida operadores y fechas,
+traduce la propuesta a sintaxis de Chroma y selecciona el `where` final.
+
+También se ha añadido `src/miteco_rag/bouncer.py`, un clasificador binario
+`GO`/`NO GO` que detiene preguntas claramente ajenas a los partes. Su prompt
+clasifica la intención principal y no la mera presencia de palabras como
+`fuego` o `MITECO`.
+
 ## Siguiente fase
 
-Queda pendiente convertir las comprobaciones manuales del revisor en pruebas
-automatizadas con Ollama y Chroma simulados.
+Queda pendiente convertir las comprobaciones manuales del revisor, generador y
+bouncer en pruebas automatizadas con Ollama simulado. La validación del filtro
+propuesto deberá ampliarse para comprobar valores canónicos contra el catálogo,
+condiciones contradictorias y duplicados.
 
-`src/miteco_rag/generate_filter_LLM.py` contiene por ahora el esquema inicial
-de condiciones y grupos lógicos, pero está a medio implementar y no forma
-parte todavía del flujo ejecutable. La próxima sesión completará el prompt, la
-entrada basada en `DeterministicAnalysis` y `FilterReview`, la respuesta
-estructurada y la limpieza de imports. Después, la propuesta se validará con
-Pydantic, se reconciliará campo por campo y se traducirá deterministicamente
-al `where` de Chroma.
-
-También se implementará de forma independiente el clasificador que decida si
-la pregunta pertenece al dominio de incendios de MITECO.
+Ollama Cloud no garantiza actualmente el cumplimiento del JSON Schema enviado
+mediante `format`. Los prompts muestran el JSON exacto y Pydantic valida las
+respuestas, pero todavía debe decidirse una política controlada de reintento o
+normalización cuando el modelo devuelva una etiqueta válida como texto plano.
 
 Después, el workflow de LangGraph elegira entre recuperacion semantica,
 hibrida, exhaustiva, recuento o linea temporal. Tras consultar Chroma evaluara
@@ -266,9 +272,10 @@ python src/miteco_rag/main.py
 
 El programa solicita una pregunta, recupera hasta diez chunks y muestra la
 respuesta fundamentada. La primera ejecución del embedding puede tardar por la
-carga de BGE-M3. En el estado transitorio actual se ejecuta el revisor, pero su
-acción todavía no modifica el filtro de retrieval: hasta completar el
-generador, Chroma recibe el `deterministic_where`.
+carga de BGE-M3. El bouncer puede detener la consulta; `keep` conserva el
+`deterministic_where`; `extend` y `replace` generan y traducen una propuesta
+nueva; `clarify` muestra los problemas detectados y termina antes del
+retrieval.
 
 ## Alcance inicial
 
@@ -293,6 +300,9 @@ La arquitectura acordada para el workflow con LLM y LangGraph se documenta en
 
 La revisión del primer revisor LLM y sus pruebas pendientes se documenta en
 [docs/REVISION_REVISOR_QUERY_FILTERS.md](docs/REVISION_REVISOR_QUERY_FILTERS.md).
+
+La revisión del filtro LLM, su traducción determinista y el bouncer está en
+[docs/REVISION_FILTRO_LLM_Y_BOUNCER.md](docs/REVISION_FILTRO_LLM_Y_BOUNCER.md).
 
 La solucion comentada de la primera fase puede estudiarse y ejecutarse desde
 [notebooks/01_fase1_parseo_miteco.ipynb](notebooks/01_fase1_parseo_miteco.ipynb).

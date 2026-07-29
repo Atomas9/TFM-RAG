@@ -1,4 +1,5 @@
 from core import loader
+from bouncer import bouncer
 from query_filters import build_deterministic_analysis
 from revisor_query_filters import revisor
 from generate_filter_LLM import generate_filter_llm, resolve_final_where
@@ -13,10 +14,19 @@ def main() -> None:
     emb_model, collection, catalog = loader()
 
     query = input('Escribe tu pregunta: ')
+    decision = bouncer(query)
+    if decision.decision == 'NO GO':
+        print('\nPregunta no relacionada con incendios')
+        return
     analysis = build_deterministic_analysis(query, catalog)
     where = analysis.deterministic_where
     review = revisor(query, analysis)
-    if review.action in {'extend', 'replace'}:
+    if review.action == 'clarify':
+        print('\nLa consulta necesita una aclaración:\n')
+        for issue in review.issues:
+            print(f'- {issue}')
+        return
+    elif review.action in {'extend', 'replace'}:
         proposal = generate_filter_llm(query, analysis, review, catalog)
         where =  resolve_final_where(analysis, review, proposal)
 

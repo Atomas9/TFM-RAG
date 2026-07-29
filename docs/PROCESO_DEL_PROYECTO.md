@@ -289,6 +289,9 @@ En este momento están completadas:
 - búsqueda semántica;
 - búsqueda híbrida con filtros deterministas;
 - revisión LLM estructurada de coherencia y suficiencia de filtros;
+- propuesta LLM de filtros para `extend` y `replace`;
+- traducción determinista de condiciones y grupos al `where` final;
+- clasificación binaria de entrada mediante el bouncer;
 - carga única del modelo de embeddings, la colección y el catálogo;
 - análisis determinista reutilizable mediante `DeterministicAnalysis`;
 - formateo del contexto recuperado;
@@ -315,21 +318,24 @@ La versión actual todavía tiene varios límites:
 - una búsqueda sin resultados no siempre significa que un incendio no
   existiera, sino que no consta en los partes disponibles;
 - todavía no se ha calibrado un umbral de distancia semántica;
-- el revisor se ejecuta desde `main.py`, pero su acción todavía no decide el
-  filtro final ni dispone de pruebas automatizadas con dobles;
-- una provincia y una comunidad coordinadas como alternativas pueden
-  combinarse incorrectamente con `$and`;
+- el revisor, generador y bouncer todavía no disponen de pruebas automatizadas
+  con Ollama simulado;
+- la propuesta LLM valida campos, tipos, operadores y fechas, pero todavía no
+  comprueba todos los valores contra el catálogo ni detecta duplicados y
+  contradicciones entre condiciones;
+- Ollama Cloud no aplica actualmente el JSON Schema de `format`, por lo que
+  Pydantic puede rechazar una salida no JSON aunque su etiqueta sea correcta;
+- el modelo de embeddings y Chroma se cargan antes del bouncer en el `main`
+  actual, aunque una respuesta `NO GO` ya no los necesite;
 - la identidad entre snapshots de días distintos sigue siendo heurística.
 
 ## 14. Siguiente fase: revisión de filtros y LangGraph
 
-La generación de respuestas y el revisor LLM ya funcionan como componentes
-independientes. El generador LLM de nuevos filtros dispone de un esquema
-Pydantic inicial, pero todavía no tiene prompt ni contrato de entrada
-terminados y conserva imports anteriores a la refactorización. La siguiente
-etapa lo completará para las acciones `extend` y `replace`, añadirá la
-reconciliación determinista y, posteriormente, el clasificador de dominio y un
-workflow controlado con LangGraph.
+La generación de respuestas, el revisor, el generador de filtros y el bouncer
+ya funcionan como componentes independientes. La siguiente etapa consolidará
+sus contratos mediante pruebas automatizadas, reforzará la validación
+determinista y, posteriormente, los conectará mediante un workflow controlado
+con LangGraph.
 
 El recorrido previsto será:
 
@@ -378,9 +384,10 @@ El diseño completo se encuentra en
 | `src/miteco_rag/parseo_y_chuncking.py` | Lectura, parseo, snapshots y JSONL |
 | `src/miteco_rag/embeddings_chroma.py` | Embeddings e indexación |
 | `src/miteco_rag/core.py` | Carga única del modelo, la colección y el catálogo |
+| `src/miteco_rag/bouncer.py` | Clasificación binaria de entrada `GO`/`NO GO` |
 | `src/miteco_rag/query_filters.py` | Interpretación determinista de filtros |
 | `src/miteco_rag/revisor_query_filters.py` | Revisión LLM estructurada de los filtros deterministas |
-| `src/miteco_rag/generate_filter_LLM.py` | Esqueleto del generador LLM de propuestas de filtros |
+| `src/miteco_rag/generate_filter_LLM.py` | Propuesta LLM, traducción a Chroma y resolución del filtro final |
 | `src/miteco_rag/retrieval_chroma.py` | Implementación de retrieval desarrollada durante el aprendizaje |
 | `src/miteco_rag/extras/retrieval_chroma_solution.py` | Implementación de referencia |
 | `src/miteco_rag/augmented_generator.py` | Contexto y generación con Ollama |
@@ -440,3 +447,63 @@ La trazabilidad estructurada se ha discutido, pero se implementará más
 adelante. Se separará el historial conversacional de los eventos técnicos del
 pipeline; estos últimos podrán registrarse como JSONL por `run_id` sin
 incorporarlos a los mensajes enviados al generador de respuestas.
+
+## 18. Corrección LLM del filtro
+
+Cuando el revisor devuelve `extend` o `replace`,
+`generate_filter_llm()` recibe la pregunta, el `DeterministicAnalysis`, el
+`FilterReview` y los valores canónicos del catálogo. El modelo no genera código
+ni un diccionario libre de Chroma, sino un `FilterProposal`:
+
+```text
+FilterProposal
+└── groups
+    └── FilterGroup: AND u OR
+        └── FilterCondition: campo, operador y valor
+```
+
+Python comprueba la compatibilidad entre operadores escalares y de lista,
+restringe los rangos al campo de fecha y valida fechas reales con formato
+`YYYYMMDD`.
+
+```text
+FilterCondition
+      ↓
+condition_to_chroma()
+      ↓
+FilterGroup
+      ↓
+group_to_chroma()
+      ↓
+FilterProposal
+      ↓
+proposal_to_chroma_where()
+      ↓
+final_where
+```
+
+Las condiciones de un grupo utilizan su `logic`; los grupos diferentes se
+combinan mediante `AND`. `resolve_final_where()` conserva el filtro
+determinista para `keep`, utiliza la propuesta completa para `extend` y
+`replace`, y detiene una continuación automática para `clarify`.
+
+La consulta histórica sobre León y Andalucía produjo un `$or` entre provincia
+León y comunidad Andalucía. Chroma aceptó el filtro y recuperó siete snapshots.
+
+## 19. Clasificación inicial con el bouncer
+
+`bouncer.py` ejecuta una decisión binaria antes del análisis de metadatos:
+
+```text
+pregunta
+   ↓
+bouncer
+   ├── NO GO → respuesta predeterminada y fin
+   └── GO    → análisis, revisión, retrieval y generación
+```
+
+El prompt diferencia una petición real sobre los partes de la aparición
+aislada de términos como `fuego`, `incendio`, `MITECO` o `BRIF`. El cliente
+envía el esquema Pydantic en `format`, pero Ollama Cloud no soporta actualmente
+structured outputs. Pydantic mantiene la validación posterior y queda
+pendiente definir una recuperación controlada ante texto plano o JSON inválido.
