@@ -1,9 +1,8 @@
 import ollama
 import json
 
-from query_filters import MetadataCatalog, ParsedQuery, metadata_query, build_chroma_where, parse_metadata_filters
 from revisor_query_filters import FilterReview
-from retrieval_chroma import load_chroma_collection
+from query_filters import DeterministicAnalysis, MetadataCatalog
 
 from typing import Literal
 from pydantic import BaseModel, Field
@@ -58,8 +57,7 @@ class FilterProposal(BaseModel):
 
 def generate_filter_llm(
         query: str, 
-        parsed_query: ParsedQuery,
-        deterministic_where: dict[str, object] | None,
+        analysis: DeterministicAnalysis,
         review: FilterReview,
         catalog: MetadataCatalog,
         model_name: str = OLLAMA_MODEL
