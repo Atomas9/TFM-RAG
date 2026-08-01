@@ -32,7 +32,7 @@ def main() -> None:
 
     raw_context = retrieve(query, emb_model, collection, where, top_k = 10)
     context = generate_context(raw_context)
-    answer = generate_answer(query = query, context = context)
+    answer = generate_answer(query, context, where)
 
     print('\nRespuesta:\n')
     print(answer)
