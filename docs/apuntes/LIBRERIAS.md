@@ -603,7 +603,36 @@ guardarán en variables de entorno, nunca en Git.
 
 Documentación oficial: [cliente Python de Ollama](https://github.com/ollama/ollama-python).
 
-## 9. Pruebas y notebooks
+## 9. LangGraph: orquestación del workflow
+
+LangGraph organiza un proceso como un conjunto de nodos conectados mediante
+aristas. No genera embeddings, no consulta Chroma y no sustituye las llamadas a
+Ollama: decide qué función se ejecuta y conserva el estado compartido.
+
+```python
+graph = StateGraph(GraphState)
+graph.add_node("Bouncer", bouncer_node)
+graph.add_edge(START, "Bouncer")
+compiled_graph = graph.compile()
+```
+
+- `StateGraph(GraphState)`: crea un grafo cuyo estado sigue el esquema
+  `GraphState`.
+- `.add_node(nombre, funcion)`: registra la función ejecutada en una fase.
+- `.add_edge(origen, destino)`: crea una transición fija.
+- `.add_conditional_edges(...)`: elige la transición mediante una función de
+  routing.
+- `.compile(...)`: valida las conexiones y produce el grafo ejecutable.
+- `.invoke(entrada, config)`: ejecuta el workflow y devuelve el estado final.
+- `MemorySaver`: conserva checkpoints mientras el proceso sigue abierto.
+
+En este proyecto, `functools.partial` configura los nodos que necesitan el
+catálogo, el modelo de embeddings o la colección. Esos recursos no se guardan
+en el estado porque son dependencias pesadas y no resultados trazables.
+
+Documentación oficial: [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api).
+
+## 10. Pruebas y notebooks
 
 ### pytest: pruebas automatizadas
 
@@ -661,7 +690,7 @@ los apuntes ejecutables del proyecto.
 
 Documentación oficial: [nbformat](https://nbformat.readthedocs.io/en/latest/).
 
-## 10. Mapa rápido por fases
+## 11. Mapa rápido por fases
 
 | Fase | Librerías principales | Resultado |
 |---|---|---|
@@ -671,9 +700,10 @@ Documentación oficial: [nbformat](https://nbformat.readthedocs.io/en/latest/).
 | Embeddings | Sentence Transformers, Transformers, PyTorch, NumPy | Un vector por chunk |
 | Persistencia y búsqueda | ChromaDB | Consulta semántica y por metadatos |
 | Generación | Ollama | Respuesta basada en el contexto recuperado |
+| Orquestación | LangGraph | Estado, nodos, rutas y checkpoints del workflow |
 | Calidad | pytest, ipykernel, nbformat | Pruebas y apuntes reproducibles |
 
-## 11. Qué conviene aprender primero
+## 12. Qué conviene aprender primero
 
 Una vez completado el primer parser y el primer índice, el orden más útil es:
 

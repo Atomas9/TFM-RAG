@@ -1,10 +1,13 @@
 # Arquitectura del workflow RAG con LangGraph
 
-Fecha de decisión: 2026-07-23.
+Fecha de decisión: 2026-07-23. Primera implementación: 2026-08-03.
 
 Este documento define la arquitectura acordada para incorporar LLM al RAG de
-incendios de MITECO. Describe el diseño previsto; los nodos todavía no están
-implementados.
+incendios de MITECO. La primera versión funcional del grafo ya implementa la
+clasificación, el análisis determinista, la revisión de filtros, la corrección
+opcional, el retrieval y la generación. Las ramas de evaluación de contexto,
+reintento y conversación descritas más adelante siguen siendo evolución
+prevista.
 
 El sistema se construirá como un **workflow controlado con LangGraph**. No todos
 los nodos utilizarán inteligencia artificial: las operaciones que puedan
@@ -514,8 +517,10 @@ devolver un error.
 
 ## 10. Persistencia y memoria
 
-La primera versión de LangGraph no necesita checkpointer. Más adelante podrá
-añadirse persistencia para preguntas consecutivas:
+La primera versión utiliza `MemorySaver` y un `thread_id`. Esto permite guardar
+checkpoints durante la vida del proceso, pero no crea por sí solo memoria
+conversacional ni persiste datos después de cerrar Python. Más adelante se
+añadirá persistencia para preguntas consecutivas:
 
 ```text
 Usuario: ¿Qué incendios hay en Castilla y León?
@@ -523,7 +528,8 @@ Usuario: ¿Y cuáles están activos?
 ```
 
 En ese caso el estado conversacional deberá resolver que `cuáles` conserva el
-ámbito geográfico de la pregunta anterior.
+ámbito geográfico de la pregunta anterior. También deberá separar los mensajes
+que necesita el LLM de la traza técnica de nodos, filtros y documentos.
 
 La memoria se incorporará después de validar correctamente consultas
 independientes.
@@ -563,11 +569,11 @@ No se implementará todo el grafo a la vez.
 6. Ampliar la validación y reconciliación deterministas de las propuestas.
 7. ~~Implementar la primera versión binaria del clasificador de dominio.~~
 8. Crear un conjunto inicial de preguntas de evaluación.
-9. Corregir los imports internos y construir `rag_graph.py`.
+9. ~~Corregir los imports internos y construir `rag_graph.py`.~~
 10. Añadir la selección de modo de retrieval.
 11. Añadir evaluación de contexto y un único reintento.
-12. Incorporar generación fundamentada.
-13. Evaluar persistencia conversacional posteriormente.
+12. ~~Incorporar generación fundamentada.~~
+13. Incorporar historial conversacional y persistencia de trazas.
 
 ## 13. Decisiones pendientes
 

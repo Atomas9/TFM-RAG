@@ -507,3 +507,65 @@ aislada de términos como `fuego`, `incendio`, `MITECO` o `BRIF`. El cliente
 envía el esquema Pydantic en `format`, pero Ollama Cloud no soporta actualmente
 structured outputs. Pydantic mantiene la validación posterior y queda
 pendiente definir una recuperación controlada ante texto plano o JSON inválido.
+
+## 20. Primera integración con LangGraph
+
+El pipeline lineal de `main.py` se ha reproducido en `rag_graph.py` como un
+grafo de estados. LangGraph no sustituye al parser, Chroma ni las llamadas a
+Ollama: organiza en qué orden se ejecutan y qué ruta sigue cada consulta.
+
+```text
+START
+  │
+  ▼
+Bouncer
+  ├── NO GO ──────────────────────────────> END
+  └── GO
+       ▼
+DeterministicAnalysis
+       │
+       ▼
+Reviewer
+  ├── clarify ────────────────────────────> END
+  ├── keep ───────────────────────────────> Retrieve
+  └── extend / replace ─> GenerateFilter ─> ResolveWhere
+                                                │
+                                                ▼
+                                             Retrieve
+                                                │
+                                                ▼
+                                        GenerateContext
+                                                │
+                                                ▼
+                                         GenerateAnswer
+                                                │
+                                                ▼
+                                               END
+```
+
+`GraphState` acumula las salidas de los nodos. En particular, mantiene
+`deterministic_where` y `final_where` como campos distintos. De esta forma una
+ejecución permite comparar el filtro construido por reglas con el filtro que
+finalmente recibió Chroma.
+
+El modelo de embeddings, la colección y el catálogo se cargan una vez mediante
+`core.loader()`. No se incluyen en `GraphState` porque son recursos pesados y
+no deben serializarse en los checkpoints. Los nodos se mantienen como funciones
+externas y `functools.partial` les asigna las dependencias necesarias durante
+la construcción del grafo.
+
+`main_langgraph.py` se limita a construir el workflow, asignar un `thread_id`,
+invocarlo con la pregunta y mostrar `state["answer"]`. `MemorySaver` conserva
+los estados mientras el proceso está abierto, pero todavía no proporciona
+historial duradero ni hace que el sistema entienda automáticamente preguntas
+conversacionales.
+
+La siguiente ampliación separará dos memorias:
+
+- historial conversacional, con las preguntas y respuestas que necesita el
+  sistema para interpretar referencias a turnos anteriores;
+- traza técnica, con decisiones, filtros, documentos y rutas de cada consulta.
+
+Antes de reutilizar un mismo estado para varias preguntas habrá que impedir que
+campos transitorios de una ejecución anterior, como `proposal` o `context`, se
+interpreten como resultados de la nueva consulta.

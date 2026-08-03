@@ -38,8 +38,9 @@ El MVP de generación está implementado en
 `src/miteco_rag/augmented_generator.py`. Formatea los resultados de Chroma,
 construye mensajes con instrucciones de grounding y genera la respuesta con
 `gemma4:31b-cloud` mediante Ollama. `src/miteco_rag/main.py` conecta por
-terminal retrieval, contexto y generación. Si Chroma no devuelve documentos,
-se responde de forma controlada sin llamar al LLM.
+terminal clasificación, filtros, retrieval, contexto y generación. Si Chroma
+no devuelve documentos, el generador recibe el estado `NO_RECORDS` y redacta
+una ausencia limitada explícitamente al corpus consultado.
 
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
@@ -92,6 +93,7 @@ escritura solo se produce al ejecutar el archivo como programa.
 6. Persistencia vectorial y filtrado de metadatos con ChromaDB.
 7. Recuperacion de contexto y generacion con `gemma4:31b-cloud` mediante
    Ollama.
+8. Orquestación controlada, rutas y checkpoints mediante LangGraph.
 
 La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
@@ -114,6 +116,9 @@ La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTUR
 ├── requirements.txt            Dependencias compatibles
 └── .env.example                Variables configurables sin secretos
 ```
+
+Dentro de `src/miteco_rag`, `rag_graph.py` define el estado, los nodos y las
+rutas de LangGraph; `main_langgraph.py` es su punto de entrada por terminal.
 
 ## Preparar el entorno
 
@@ -245,6 +250,15 @@ También se ha añadido `src/miteco_rag/bouncer.py`, un clasificador binario
 clasifica la intención principal y no la mera presencia de palabras como
 `fuego` o `MITECO`.
 
+El mismo pipeline ya dispone de una primera orquestación con LangGraph en
+`src/miteco_rag/rag_graph.py`. El estado conserva por separado el filtro
+determinista y el filtro final; los nodos reutilizan las funciones existentes
+y las rutas distinguen `NO GO`, `keep`, `extend`, `replace` y `clarify`. Los
+recursos pesados se cargan una sola vez al construir el grafo y se inyectan en
+los nodos mediante `functools.partial`, sin guardarlos en el estado. El punto
+de entrada `src/miteco_rag/main_langgraph.py` ejecuta actualmente una pregunta
+por terminal y utiliza `MemorySaver` como checkpointer en memoria.
+
 ## Siguiente fase
 
 Queda pendiente convertir las comprobaciones manuales del revisor, generador y
@@ -257,10 +271,14 @@ mediante `format`. Los prompts muestran el JSON exacto y Pydantic valida las
 respuestas, pero todavía debe decidirse una política controlada de reintento o
 normalización cuando el modelo devuelva una etiqueta válida como texto plano.
 
-Después, el workflow de LangGraph elegira entre recuperacion semantica,
-hibrida, exhaustiva, recuento o linea temporal. Tras consultar Chroma evaluara
-el contexto y permitira como maximo un segundo retrieval antes de responder o
-abstenerse.
+El siguiente incremento de LangGraph será separar la memoria conversacional de
+la traza técnica. Se permitirá formular varias preguntas con un mismo
+`thread_id`, se conservarán los mensajes y se resolverán preguntas de
+seguimiento antes de ejecutar el parser determinista. Los checkpoints en
+memoria se sustituirán después por persistencia local para conservar el
+historial entre procesos. Más adelante, el workflow podrá elegir entre
+recuperación semántica, híbrida, exhaustiva, recuento o línea temporal y
+permitir como máximo un segundo retrieval controlado.
 
 ## Probar el MVP
 
@@ -270,12 +288,24 @@ Con Ollama iniciado y el modelo Cloud disponible:
 python src/miteco_rag/main.py
 ```
 
+La versión equivalente orquestada mediante LangGraph se ejecuta con:
+
+```bash
+python src/miteco_rag/main_langgraph.py
+```
+
 El programa solicita una pregunta, recupera hasta diez chunks y muestra la
 respuesta fundamentada. La primera ejecución del embedding puede tardar por la
 carga de BGE-M3. El bouncer puede detener la consulta; `keep` conserva el
 `deterministic_where`; `extend` y `replace` generan y traducen una propuesta
 nueva; `clarify` muestra los problemas detectados y termina antes del
 retrieval.
+
+`main_langgraph.py` conserva además en `GraphState` la decisión del bouncer,
+el análisis, la revisión, la propuesta opcional, los filtros determinista y
+final, el resultado de Chroma, el contexto y la respuesta. Por ahora solicita
+una sola pregunta y `MemorySaver` pierde sus checkpoints al terminar el
+proceso.
 
 ## Alcance inicial
 

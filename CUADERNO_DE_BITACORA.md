@@ -838,3 +838,71 @@ primera barrera que impida ejecutar el RAG con preguntas ajenas al dominio.
    por pruebas.
 
 Se mantiene aplazada la trazabilidad estructurada del pipeline.
+
+## 2026-08-03 — Primera orquestación funcional con LangGraph
+
+### Objetivo
+
+Reproducir el pipeline de consulta existente mediante un grafo de estados sin
+reescribir las funciones ya desarrolladas y manteniendo un ejemplo sencillo y
+académico.
+
+### Trabajo realizado
+
+- Se añadió `langgraph` a las dependencias del entorno `RAG-TFM`.
+- Se creó `src/miteco_rag/rag_graph.py` con un `GraphState` compartido.
+- Se mantuvieron los nodos fuera de `create_graph()` para separar su lógica de
+  la construcción del workflow.
+- `loader()` se ejecuta una sola vez al construir el grafo; el modelo de
+  embeddings, la colección de Chroma y el catálogo no se guardan en el estado.
+- Los nodos que requieren recursos externos los reciben mediante
+  `functools.partial`.
+- Se implementaron los nodos `Bouncer`, `DeterministicAnalysis`, `Reviewer`,
+  `GenerateFilter`, `ResolveWhere`, `Retrieve`, `GenerateContext` y
+  `GenerateAnswer`.
+- Se añadieron rutas condicionales para detener `NO GO` y `clarify`, conservar
+  el filtro determinista en `keep` y generar un filtro nuevo en `extend` o
+  `replace`.
+- El estado conserva `deterministic_where` y `final_where` por separado para
+  comparar la interpretación inicial con el filtro realmente aplicado.
+- Se creó `src/miteco_rag/main_langgraph.py` como punto de entrada mínimo por
+  terminal.
+- Se incorporó `MemorySaver` con un `thread_id` para disponer de checkpoints
+  durante la vida del proceso.
+
+### Validación
+
+- `rag_graph.py` y `main_langgraph.py` compilan correctamente.
+- LangGraph construye el grafo y reconoce todos los nodos registrados.
+- Con Ollama, Chroma y embeddings simulados se comprobaron las rutas `NO GO`,
+  `keep`, `replace` y `clarify`.
+- `keep` aplica el filtro determinista y `replace` aplica el filtro generado.
+- La suite completa continúa superando 53 pruebas; permanecen únicamente cinco
+  advertencias externas de SWIG.
+- No se realizó en este cierre una prueba completa adicional contra Ollama
+  Cloud.
+
+### Decisiones
+
+- LangGraph orquesta funciones independientes; la lógica de dominio no se
+  reimplementa dentro del framework.
+- Los recursos pesados son dependencias del grafo, no datos del estado ni de
+  los checkpoints.
+- `partial` deja configurados los argumentos externos y permite que LangGraph
+  invoque cada nodo proporcionando solamente el estado.
+- La ruta `keep` pasa directamente de `Reviewer` a `Retrieve`; no ejecuta
+  `ResolveWhere` porque el revisor ya establece `final_where`.
+- El historial conversacional no se mezclará con las decisiones técnicas del
+  pipeline.
+
+### Próxima sesión
+
+1. Permitir varias preguntas en la misma ejecución.
+2. Diseñar y guardar el historial de mensajes de la conversación.
+3. Resolver preguntas dependientes del contexto, como `¿Y en Palencia?`, antes
+   de ejecutar el análisis determinista.
+4. Evitar que resultados transitorios de una pregunta anterior contaminen la
+   siguiente ejecución del mismo hilo.
+5. Guardar una traza persistente por consulta y sustituir posteriormente
+   `MemorySaver` por un checkpointer local duradero.
+6. Añadir pruebas automatizadas específicas de los nodos y rutas del grafo.
