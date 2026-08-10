@@ -28,6 +28,7 @@ ollama>=0.4,<1.0
 
 # Orquestacion del flujo RAG como un grafo de estados
 langgraph>=1.0,<2.0
+langgraph-checkpoint-sqlite>=3.1,<4.0
 
 # Pruebas del parser y del pipeline de recuperacion
 pytest>=8.0,<10.0

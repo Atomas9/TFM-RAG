@@ -906,3 +906,54 @@ académico.
 5. Guardar una traza persistente por consulta y sustituir posteriormente
    `MemorySaver` por un checkpointer local duradero.
 6. Añadir pruebas automatizadas específicas de los nodos y rutas del grafo.
+
+## 2026-08-10 — Persistencia SQLite y revisión de la traza
+
+### Trabajo realizado
+
+- Se instaló `langgraph-checkpoint-sqlite` en el entorno `RAG-TFM` y se añadió
+  a `requirements.txt`.
+- `main_langgraph.py` pasó a crear un `SqliteSaver` y a proporcionar el
+  checkpointer a `create_graph()`.
+- Los checkpoints se guardan en `data/checkpoints/langgraph.sqlite` y se
+  agrupan por `thread_id`.
+- La base SQLite se excluyó de Git y `data/checkpoints/.gitkeep` conserva el
+  directorio vacío en el repositorio.
+- Se creó `inspect_checkpoints.py` para consultar una conversación mediante su
+  identificador y recorrer `graph.get_state_history(config)`.
+- Se comprobó una ejecución real con ocho checkpoints desde la entrada hasta
+  `GenerateAnswer`.
+
+### Hallazgos
+
+- LangGraph puede guardar los modelos Pydantic actuales, pero advierte que está
+  deserializando tipos personalizados no registrados. Una versión futura puede
+  bloquear este comportamiento.
+- `inspect_checkpoints.py` llama a `create_graph()` y, por tanto, carga BGE-M3,
+  Chroma y el catálogo aunque la inspección solo necesite SQLite.
+- La pregunta `¿Cuál es la última fecha de incendios que tienes registrada?`
+  produjo correctamente `where=None`: no contiene una condición que limite el
+  conjunto de documentos.
+- El revisor devolvió `keep` correctamente dentro de su contrato, ya que solo
+  evalúa filtros de metadatos.
+- El pipeline aplicó después ranking semántico y respondió con la fecha máxima
+  de los diez chunks recuperados, no con la fecha máxima de toda la colección.
+  Esto demostró que falta seleccionar el modo de consulta antes del retrieval.
+
+### Tareas pendientes y prioridad
+
+1. Serializar de forma explícita los modelos Pydantic de `GraphState` mediante
+   estructuras compatibles con JSON y reconstruirlos con `model_validate()`.
+2. Añadir un nodo `ChooseRetrievalMode` que distinga búsqueda semántica,
+   híbrida, fecha máxima, recuento, consulta exhaustiva y línea temporal.
+3. Desacoplar la lectura de checkpoints de `loader()` para que el inspector no
+   cargue BGE-M3 ni abra Chroma innecesariamente.
+4. Añadir después historial conversacional y resolución de preguntas
+   dependientes de turnos anteriores.
+
+La serialización se abordará primero porque afecta a la durabilidad de todos
+los checkpoints y a los nuevos campos que se incorporen posteriormente al
+estado. La selección del modo de consulta será la siguiente mejora funcional.
+La optimización del inspector no bloquea la calidad de las respuestas y puede
+resolverse después o aprovechar una refactorización de la construcción del
+grafo.

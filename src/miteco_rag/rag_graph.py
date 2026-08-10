@@ -11,7 +11,6 @@ from retrieval_chroma import retrieve
 from augmented_generator import generate_context, generate_answer 
 
 from chromadb.api.types import QueryResult
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from functools import partial
 
@@ -119,7 +118,7 @@ def route_after_reviewer(state: GraphState) -> Literal['generate', 'keep', 'end'
 
 
 
-def create_graph():
+def create_graph(checkpointer):
     emb_model, collection, catalog = loader()
     top_k = 10
     deterministic_analysis_node_conf = partial(
@@ -173,7 +172,5 @@ def create_graph():
     graph.add_edge('GenerateContext', 'GenerateAnswer')
     graph.add_edge('GenerateAnswer', END)
 
-    memory = MemorySaver()
-    return graph.compile(checkpointer = memory)
-
+    return graph.compile(checkpointer = checkpointer)
 

@@ -108,7 +108,8 @@ La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTUR
 ├── data/
 │   ├── raw/miteco/             PDF originales y manifiesto versionados
 │   ├── processed/              Registros parseados, no versionados
-│   └── chroma/                 Indice vectorial local, no versionado
+│   ├── chroma/                 Indice vectorial local, no versionado
+│   └── checkpoints/            Trazas SQLite locales, no versionadas
 ├── .github/workflows/          Automatizacion diaria de la descarga
 ├── docs/                       Documentacion tecnica
 ├── extras/                     Codigo y documentos anteriores de referencia
@@ -257,7 +258,8 @@ y las rutas distinguen `NO GO`, `keep`, `extend`, `replace` y `clarify`. Los
 recursos pesados se cargan una sola vez al construir el grafo y se inyectan en
 los nodos mediante `functools.partial`, sin guardarlos en el estado. El punto
 de entrada `src/miteco_rag/main_langgraph.py` ejecuta actualmente una pregunta
-por terminal y utiliza `MemorySaver` como checkpointer en memoria.
+por terminal y utiliza `SqliteSaver` para conservar los checkpoints localmente
+en `data/checkpoints/langgraph.sqlite`.
 
 ## Siguiente fase
 
@@ -271,14 +273,21 @@ mediante `format`. Los prompts muestran el JSON exacto y Pydantic valida las
 respuestas, pero todavía debe decidirse una política controlada de reintento o
 normalización cuando el modelo devuelva una etiqueta válida como texto plano.
 
-El siguiente incremento de LangGraph será separar la memoria conversacional de
-la traza técnica. Se permitirá formular varias preguntas con un mismo
-`thread_id`, se conservarán los mensajes y se resolverán preguntas de
-seguimiento antes de ejecutar el parser determinista. Los checkpoints en
-memoria se sustituirán después por persistencia local para conservar el
-historial entre procesos. Más adelante, el workflow podrá elegir entre
-recuperación semántica, híbrida, exhaustiva, recuento o línea temporal y
-permitir como máximo un segundo retrieval controlado.
+El siguiente incremento de LangGraph será hacer que los valores guardados en
+`GraphState` sean serializables de forma explícita y segura. Los modelos
+Pydantic se almacenarán como datos compatibles con JSON y se reconstruirán
+mediante validación cuando un nodo los necesite.
+
+Después se añadirá un nodo que seleccione el tipo de consulta. La búsqueda
+vectorial `top_k` no sirve para operaciones globales como obtener la fecha
+máxima, contar todos los registros o construir una línea temporal. El workflow
+deberá distinguir recuperación semántica, híbrida, agregación de metadatos,
+recuento y consulta exhaustiva.
+
+También queda pendiente desacoplar la inspección de checkpoints de
+`create_graph()`: actualmente `inspect_checkpoints.py` carga BGE-M3, Chroma y
+el catálogo aunque solo necesite leer SQLite. Finalmente se incorporarán los
+mensajes conversacionales y la resolución de preguntas de seguimiento.
 
 ## Probar el MVP
 

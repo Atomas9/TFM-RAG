@@ -555,10 +555,10 @@ externas y `functools.partial` les asigna las dependencias necesarias durante
 la construcción del grafo.
 
 `main_langgraph.py` se limita a construir el workflow, asignar un `thread_id`,
-invocarlo con la pregunta y mostrar `state["answer"]`. `MemorySaver` conserva
-los estados mientras el proceso está abierto, pero todavía no proporciona
-historial duradero ni hace que el sistema entienda automáticamente preguntas
-conversacionales.
+invocarlo con la pregunta y mostrar `state["answer"]`. La persistencia se ha
+actualizado a `SqliteSaver`, que conserva el historial localmente después de
+cerrar el proceso. Esto todavía no hace que el sistema entienda automáticamente
+preguntas conversacionales.
 
 La siguiente ampliación separará dos memorias:
 
@@ -569,3 +569,32 @@ La siguiente ampliación separará dos memorias:
 Antes de reutilizar un mismo estado para varias preguntas habrá que impedir que
 campos transitorios de una ejecución anterior, como `proposal` o `context`, se
 interpreten como resultados de la nueva consulta.
+
+## 21. Deudas descubiertas al persistir e inspeccionar el grafo
+
+La primera lectura de checkpoints confirmó que el estado permite reconstruir
+la ruta completa, pero detectó tres tareas previas a ampliar el workflow.
+
+En primer lugar, `GraphState` guarda directamente modelos Pydantic como
+`BouncerDecision`, `DeterministicAnalysis` y `FilterReview`. LangGraph los
+deserializa actualmente, pero advierte que son tipos personalizados no
+registrados. Para que los checkpoints sean duraderos, legibles y menos
+dependientes de la ubicación de las clases, se guardarán representaciones
+compatibles con JSON mediante `model_dump(mode="json")`. Cada nodo reconstruirá
+el modelo necesario mediante `model_validate()`.
+
+En segundo lugar, falta distinguir filtros de metadatos y modo de consulta. Un
+`where=None` puede ser completamente correcto y, sin embargo, una búsqueda
+semántica `top_k` puede ser la operación equivocada. Las preguntas sobre fecha
+máxima, recuentos o todos los incendios requieren agregaciones o consultas
+exhaustivas. Se añadirá un nodo `ChooseRetrievalMode` antes de recuperar datos.
+
+En tercer lugar, el inspector llama a `create_graph()` para utilizar
+`get_state_history()`. Como esa función ejecuta `loader()`, inspeccionar una
+traza carga innecesariamente BGE-M3, Chroma y el catálogo. La utilidad de
+inspección se desacoplará de los recursos de inferencia o utilizará directamente
+la interfaz del checkpointer.
+
+El orden acordado es: serialización segura, selección del modo de consulta y,
+después, optimización del inspector. La conversación multiturno se construirá
+sobre ese estado ya estabilizado.

@@ -517,10 +517,10 @@ devolver un error.
 
 ## 10. Persistencia y memoria
 
-La primera versión utiliza `MemorySaver` y un `thread_id`. Esto permite guardar
-checkpoints durante la vida del proceso, pero no crea por sí solo memoria
-conversacional ni persiste datos después de cerrar Python. Más adelante se
-añadirá persistencia para preguntas consecutivas:
+La implementación utiliza `SqliteSaver` y un `thread_id`. Los checkpoints se
+conservan localmente después de cerrar Python, pero esto no crea por sí solo
+memoria conversacional. Más adelante se utilizará esa persistencia para
+preguntas consecutivas:
 
 ```text
 Usuario: ¿Qué incendios hay en Castilla y León?
@@ -570,10 +570,12 @@ No se implementará todo el grafo a la vez.
 7. ~~Implementar la primera versión binaria del clasificador de dominio.~~
 8. Crear un conjunto inicial de preguntas de evaluación.
 9. ~~Corregir los imports internos y construir `rag_graph.py`.~~
-10. Añadir la selección de modo de retrieval.
-11. Añadir evaluación de contexto y un único reintento.
-12. ~~Incorporar generación fundamentada.~~
-13. Incorporar historial conversacional y persistencia de trazas.
+10. Serializar de forma segura los modelos Pydantic almacenados en el estado.
+11. Añadir la selección de modo de retrieval.
+12. Desacoplar el inspector de checkpoints de BGE-M3 y Chroma.
+13. Añadir evaluación de contexto y un único reintento.
+14. ~~Incorporar generación fundamentada.~~
+15. Incorporar historial conversacional.
 
 ## 13. Decisiones pendientes
 
@@ -585,13 +587,15 @@ Quedan por determinar mediante experimentación:
 - umbral de mala similitud semántica;
 - tamaño inicial de `top_k`;
 - política de recuperación por cada entidad solicitada;
+- contrato de `ChooseRetrievalMode` para agregaciones, recuentos y consultas
+  exhaustivas;
 - formato final de citas;
 - almacenamiento de trazas y resultados de evaluación.
 
-Se ha acordado aplazar la implementación de trazabilidad. Cuando se aborde, el
-historial conversacional permanecerá en `messages`, mientras que las
-decisiones técnicas de cada fase se registrarán por separado, previsiblemente
-como eventos JSONL asociados a un `run_id`.
+La traza técnica ya se persiste mediante checkpoints SQLite. Antes de ampliar
+su uso se convertirán los modelos Pydantic del estado en datos serializables de
+forma explícita. El historial conversacional permanecerá en `messages` y no se
+mezclará con las decisiones técnicas de cada fase.
 
 ## 14. Referencias
 
