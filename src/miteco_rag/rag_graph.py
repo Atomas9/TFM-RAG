@@ -177,4 +177,3 @@ def create_graph():
     return graph.compile(checkpointer = memory)
 
 
-
