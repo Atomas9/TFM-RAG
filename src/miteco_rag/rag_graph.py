@@ -3,7 +3,7 @@ from chromadb import Collection
 from sentence_transformers import SentenceTransformer
 
 from core import loader
-from bouncer import BouncerDecision, bouncer
+from bouncer import bouncer
 from query_filters import DeterministicAnalysis, MetadataCatalog, build_deterministic_analysis
 from revisor_query_filters import FilterReview, revisor
 from generate_filter_LLM import FilterProposal, generate_filter_llm, resolve_final_where
@@ -17,10 +17,10 @@ from functools import partial
 class GraphState(TypedDict, total = False):
     """Información que los nodos comparten durante una ejecución."""
     query: str
-    decision: BouncerDecision
-    analysis: DeterministicAnalysis
-    review: FilterReview
-    proposal: FilterProposal
+    decision: Literal["GO", "NO GO"]
+    analysis: dict[str, object]
+    review: dict[str, object]
+    proposal: dict[str, object]
     deterministic_where: dict[str, object] | None
     final_where: dict[str, object] | None
     raw_context: QueryResult
@@ -32,9 +32,10 @@ class GraphState(TypedDict, total = False):
 # NODOS
 # ------------------
 def bouncer_node(state: GraphState):
-    decision = bouncer(state['query'])
+    response = bouncer(state['query'])
+    decision = response.decision
     result = {'decision': decision}
-    if decision.decision == 'NO GO':
+    if decision == 'NO GO':
         result['answer'] = 'Pregunta no relacionada con incendios'
 
     return result
@@ -43,14 +44,15 @@ def bouncer_node(state: GraphState):
 def deterministic_analysis_node(state: GraphState, catalog: MetadataCatalog):
     analysis = build_deterministic_analysis(state['query'], catalog)
     result = {
-        'analysis': analysis,
+        'analysis': analysis.model_dump(mode = 'json'),
         'deterministic_where': analysis.deterministic_where
     }
     return result
 
 def reviewer_node(state: GraphState):
-    review = revisor(state['query'], state['analysis'])
-    result = {'review': review}
+    analysis = DeterministicAnalysis.model_validate(state['analysis'])
+    review = revisor(state['query'], analysis)
+    result = {'review': review.model_dump(mode = 'json')}
     if review.action == 'clarify':
         issues = '\n'.join(f'- {issue}' for issue in review.issues)
         result['answer'] = (
@@ -63,19 +65,24 @@ def reviewer_node(state: GraphState):
     return result
 
 def generate_filter_node(state: GraphState, catalog: MetadataCatalog):
+    analysis = DeterministicAnalysis.model_validate(state['analysis'])
+    review = FilterReview.model_validate(state['review'])
     proposal = generate_filter_llm(
         state['query'], 
-        state['analysis'], 
-        state['review'], 
+        analysis,
+        review,
         catalog)
-    result = {'proposal': proposal}
+    result = {'proposal': proposal.model_dump(mode = 'json')}
     return result
 
 def resolve_where_node(state: GraphState):
+    analysis = DeterministicAnalysis.model_validate(state['analysis'])
+    review = FilterReview.model_validate(state['review'])
+    proposal = FilterProposal.model_validate(state['proposal'])
     where = resolve_final_where(
-        state['analysis'],
-        state['review'],
-        state['proposal']
+        analysis,
+        review,
+        proposal
         )
     result = {'final_where': where}
     return result
@@ -102,13 +109,13 @@ def generate_answer_node(state: GraphState):
 # ROUTING LOGIC
 # -------------
 def route_after_bouncer(state: GraphState) -> Literal['continue', 'end']:
-    if state['decision'].decision == 'GO':
+    if state['decision'] == 'GO':
         return 'continue'
     else:
         return 'end'
 
 def route_after_reviewer(state: GraphState) -> Literal['generate', 'keep', 'end']:
-    action = state['review'].action
+    action = state['review']['action']
     if action in {'extend', 'replace'}:
         return 'generate'
     elif action == 'keep':

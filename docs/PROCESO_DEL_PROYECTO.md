@@ -575,13 +575,18 @@ interpreten como resultados de la nueva consulta.
 La primera lectura de checkpoints confirmó que el estado permite reconstruir
 la ruta completa, pero detectó tres tareas previas a ampliar el workflow.
 
-En primer lugar, `GraphState` guarda directamente modelos Pydantic como
-`BouncerDecision`, `DeterministicAnalysis` y `FilterReview`. LangGraph los
-deserializa actualmente, pero advierte que son tipos personalizados no
-registrados. Para que los checkpoints sean duraderos, legibles y menos
-dependientes de la ubicación de las clases, se guardarán representaciones
-compatibles con JSON mediante `model_dump(mode="json")`. Cada nodo reconstruirá
-el modelo necesario mediante `model_validate()`.
+En una primera versión, `GraphState` guardaba directamente modelos Pydantic
+como `BouncerDecision`, `DeterministicAnalysis` y `FilterReview`. LangGraph los
+deserializaba, pero advertía que eran tipos personalizados no registrados. La
+implementación se corrigió: el estado guarda cadenas y diccionarios compatibles
+con JSON mediante `model_dump(mode="json")`, y cada nodo reconstruye
+temporalmente el modelo necesario mediante `model_validate()`.
+
+La decisión del bouncer se persiste como `GO` o `NO GO`; el análisis, la
+revisión y la propuesta se persisten como diccionarios. Las funciones de
+negocio conservan sus modelos Pydantic, por lo que no se pierde validación. Las
+cuatro rutas principales se comprobaron con SQLite y MsgPack estricto y los
+checkpoints pudieron reabrirse sin deserializar clases personalizadas.
 
 En segundo lugar, falta distinguir filtros de metadatos y modo de consulta. Un
 `where=None` puede ser completamente correcto y, sin embargo, una búsqueda
@@ -595,6 +600,6 @@ traza carga innecesariamente BGE-M3, Chroma y el catálogo. La utilidad de
 inspección se desacoplará de los recursos de inferencia o utilizará directamente
 la interfaz del checkpointer.
 
-El orden acordado es: serialización segura, selección del modo de consulta y,
-después, optimización del inspector. La conversación multiturno se construirá
-sobre ese estado ya estabilizado.
+Completada la serialización segura, el siguiente paso es la selección del modo
+de consulta y, después, la optimización del inspector. La conversación
+multiturno se construirá sobre ese estado ya estabilizado.

@@ -273,12 +273,14 @@ mediante `format`. Los prompts muestran el JSON exacto y Pydantic valida las
 respuestas, pero todavía debe decidirse una política controlada de reintento o
 normalización cuando el modelo devuelva una etiqueta válida como texto plano.
 
-El siguiente incremento de LangGraph será hacer que los valores guardados en
-`GraphState` sean serializables de forma explícita y segura. Los modelos
-Pydantic se almacenarán como datos compatibles con JSON y se reconstruirán
-mediante validación cuando un nodo los necesite.
+Los valores persistidos en `GraphState` ya son serializables de forma explícita
+y segura. Los modelos Pydantic se convierten mediante
+`model_dump(mode="json")` antes de entrar en el estado y se reconstruyen con
+`model_validate()` únicamente dentro de los nodos que los necesitan. Las rutas
+`NO GO`, `keep`, `replace` y `clarify` se han validado con SQLite y MsgPack en
+modo estricto, sin deserializar clases personalizadas.
 
-Después se añadirá un nodo que seleccione el tipo de consulta. La búsqueda
+El siguiente incremento será un nodo que seleccione el tipo de consulta. La búsqueda
 vectorial `top_k` no sirve para operaciones globales como obtener la fecha
 máxima, contar todos los registros o construir una línea temporal. El workflow
 deberá distinguir recuperación semántica, híbrida, agregación de metadatos,

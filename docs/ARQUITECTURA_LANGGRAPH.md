@@ -570,7 +570,7 @@ No se implementará todo el grafo a la vez.
 7. ~~Implementar la primera versión binaria del clasificador de dominio.~~
 8. Crear un conjunto inicial de preguntas de evaluación.
 9. ~~Corregir los imports internos y construir `rag_graph.py`.~~
-10. Serializar de forma segura los modelos Pydantic almacenados en el estado.
+10. ~~Serializar de forma segura los modelos Pydantic almacenados en el estado.~~
 11. Añadir la selección de modo de retrieval.
 12. Desacoplar el inspector de checkpoints de BGE-M3 y Chroma.
 13. Añadir evaluación de contexto y un único reintento.
@@ -592,10 +592,11 @@ Quedan por determinar mediante experimentación:
 - formato final de citas;
 - almacenamiento de trazas y resultados de evaluación.
 
-La traza técnica ya se persiste mediante checkpoints SQLite. Antes de ampliar
-su uso se convertirán los modelos Pydantic del estado en datos serializables de
-forma explícita. El historial conversacional permanecerá en `messages` y no se
-mezclará con las decisiones técnicas de cada fase.
+La traza técnica ya se persiste mediante checkpoints SQLite. Los modelos
+Pydantic se convierten en datos compatibles con JSON antes de entrar en el
+estado y se reconstruyen dentro de los nodos cuando es necesario. El historial
+conversacional permanecerá en `messages` y no se mezclará con las decisiones
+técnicas de cada fase.
 
 ## 14. Referencias
 

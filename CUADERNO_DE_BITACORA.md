@@ -957,3 +957,30 @@ estado. La selección del modo de consulta será la siguiente mejora funcional.
 La optimización del inspector no bloquea la calidad de las respuestas y puede
 resolverse después o aprovechar una refactorización de la construcción del
 grafo.
+
+### Serialización segura completada
+
+- `GraphState` dejó de almacenar instancias de `BouncerDecision`,
+  `DeterministicAnalysis`, `FilterReview` y `FilterProposal`.
+- La decisión del bouncer se guarda como una cadena `GO` o `NO GO`.
+- El análisis, la revisión y la propuesta se guardan como diccionarios
+  compatibles con JSON mediante `model_dump(mode="json")`.
+- Los nodos reconstruyen temporalmente los modelos necesarios con
+  `model_validate()` antes de llamar a las funciones de negocio.
+- El parser, el revisor y el generador de filtros mantienen sus contratos
+  Pydantic; el cambio afecta únicamente a la frontera persistida del grafo.
+- Se validaron las rutas `NO GO`, `keep`, `replace` y `clarify` con bases SQLite
+  temporales y `LANGGRAPH_STRICT_MSGPACK=true`.
+- Al cerrar y reabrir las bases, los campos persistidos fueron `str` y `dict` y
+  no se produjeron advertencias por tipos personalizados.
+- La ruta `replace` reconstruyó correctamente la propuesta y produjo el filtro
+  geográfico `$or` esperado.
+- La suite completa mantiene 53 pruebas superadas.
+
+### Próxima sesión
+
+Diseñar e implementar `ChooseRetrievalMode`. El primer contrato deberá
+distinguir como mínimo búsqueda semántica o híbrida, fecha máxima, recuento,
+consulta exhaustiva y línea temporal. Las respuestas agregadas no dependerán
+de que el registro pertinente aparezca accidentalmente entre los `top_k`
+semánticos.
