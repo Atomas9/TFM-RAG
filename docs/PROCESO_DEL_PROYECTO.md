@@ -388,7 +388,10 @@ El diseño completo se encuentra en
 | `src/miteco_rag/query_filters.py` | Interpretación determinista de filtros |
 | `src/miteco_rag/revisor_query_filters.py` | Revisión LLM estructurada de los filtros deterministas |
 | `src/miteco_rag/generate_filter_LLM.py` | Propuesta LLM, traducción a Chroma y resolución del filtro final |
-| `src/miteco_rag/retrieval_chroma.py` | Implementación de retrieval desarrollada durante el aprendizaje |
+| `src/miteco_rag/retrieval_mode.py` | Selección determinista del modo y objetivo de recuperación |
+| `src/miteco_rag/metadata_store.py` | Construcción e índices de la base SQLite de metadatos |
+| `src/miteco_rag/metadata_queries.py` | Traducción segura del `where` y agregaciones SQL |
+| `src/miteco_rag/retrieval_chroma.py` | Retrieval híbrido, de extremos y de recuentos con contrato común |
 | `src/miteco_rag/extras/retrieval_chroma_solution.py` | Implementación de referencia |
 | `src/miteco_rag/augmented_generator.py` | Contexto y generación con Ollama |
 | `src/miteco_rag/main.py` | Punto de entrada del MVP |
@@ -603,3 +606,61 @@ la interfaz del checkpointer.
 Completada la serialización segura, el siguiente paso es la selección del modo
 de consulta y, después, la optimización del inspector. La conversación
 multiturno se construirá sobre ese estado ya estabilizado.
+
+## 22. Selección del retrieval y consultas exactas con SQLite
+
+La selección del modo se ha implementado primero como una función independiente
+de LangGraph. `choose_retrieval_mode()` distingue:
+
+```text
+hybrid   → similitud vectorial con filtro opcional
+min_max  → fecha mínima o máxima dentro del conjunto filtrado
+count    → recuento exacto de incendios, snapshots o informes
+timeline → intención reconocida, retrieval todavía pendiente
+```
+
+Chroma continúa siendo el almacén vectorial. Para agregaciones se creó una base
+SQLite local y regenerable desde `fire_snapshots.jsonl`. Ambas bases comparten
+`snapshot_id`, que permite calcular una selección exacta en SQL y recuperar
+después sus chunks desde Chroma.
+
+```text
+final_where
+    ├── hybrid  → collection.query() → top_k semántico
+    ├── min_max → SQL MIN/MAX → snapshot_id → collection.get()
+    └── count   → SQL COUNT → resultado agregado
+```
+
+`final_where` mantiene la sintaxis de Chroma. `compile_where_to_sql()` valida
+una lista cerrada de campos y traduce de forma recursiva igualdad, desigualdad,
+listas, rangos, `AND` y `OR`. Los valores se envían siempre como parámetros
+`?`; no se concatena texto del usuario ni del LLM dentro del SQL.
+
+La operación `min_max` aplica el filtro antes de calcular el extremo. Por
+ejemplo, la última fecha de León se obtiene con el equivalente a:
+
+```sql
+SELECT MAX(report_date_number)
+FROM fire_snapshots
+WHERE province_normalized = ?;
+```
+
+Después se recuperan todos los snapshots empatados en esa fecha. El recuento
+utiliza tres definiciones explícitas:
+
+- `incidents`: `COUNT(DISTINCT incident_key)`;
+- `snapshots`: `COUNT(*)`;
+- `reports`: `COUNT(DISTINCT source_sha256)`.
+
+Los retrievals devuelven un diccionario plano `RetrievalResult` con modo, IDs,
+documentos, metadatos, distancias y un agregado opcional. Esto desacopla el
+resto del pipeline de las listas anidadas de `collection.query()` y permite que
+una única `generate_context()` formatee tanto chunks como resultados exactos.
+El generador distingue `WITH_DATA` y `NO_DATA`; un recuento cero sigue siendo
+un dato calculado y no un fallo de recuperación.
+
+Las funciones ya están verificadas de manera independiente, pero el flujo
+lineal y LangGraph todavía ejecutan únicamente el retrieval híbrido. La próxima
+fase añadirá el plan de recuperación al estado, inyectará la conexión SQLite y
+hará converger las tres ramas implementadas en los mismos nodos de contexto y
+respuesta.

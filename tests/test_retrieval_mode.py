@@ -36,14 +36,18 @@ def test_choose_maximum_query(query: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "query",
+    ("query", "expected_target"),
     [
-        "¿Cuántos incendios activos hay en León?",
-        "Dime el número total de registros",
+        ("¿Cuántos incendios activos hay en León?", "incidents"),
+        ("Dime el número total de registros", "snapshots"),
+        ("¿Qué cantidad de informes tienes?", "reports"),
     ],
 )
-def test_choose_count_query(query: str) -> None:
-    assert choose_retrieval_mode(query).mode == "count"
+def test_choose_count_query(query: str, expected_target: str) -> None:
+    result = choose_retrieval_mode(query)
+
+    assert result.mode == "count"
+    assert result.count_target == expected_target
 
 
 @pytest.mark.parametrize(

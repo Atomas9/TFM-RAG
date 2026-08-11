@@ -32,7 +32,7 @@ CUANDO SE HAYAN RECUPERADO DATOS
 - Cuando sea posible, menciona el archivo y la página de procedencia.
 - No confundas el último parte disponible con información en tiempo real.
 
-CUANDO NO SE HAYAN RECUPERADO DOCUMENTOS
+CUANDO NO SE HAYAN RECUPERADO DATOS
 
 Si el filtro final no es null:
 
@@ -117,9 +117,9 @@ def generate_answer(
     model_name: str = OLLAMA_MODEL,
 ) -> str:
     retrieval_status = (
-        'WITH_RECORDS'
+        'WITH_DATA'
         if context.strip()
-        else 'NO_RECORDS'
+        else 'NO_DATA'
     )
     where_json = json.dumps(
         where,
@@ -129,7 +129,7 @@ def generate_answer(
     context_for_prompt = (
         context
         if context.strip()
-        else '[No se recuperaron documentos.]'
+        else '[No se recuperaron datos.]'
     )
 
     messages = [

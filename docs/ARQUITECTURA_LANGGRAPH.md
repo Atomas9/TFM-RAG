@@ -145,14 +145,11 @@ class RAGState(TypedDict):
     # Plan de recuperación
     semantic_query: str
     where: dict | None
-    retrieval_mode: str
+    retrieval_plan: dict[str, object]
     top_k: int
 
     # Resultado
-    ids: list[str]
-    documents: list[str]
-    metadatas: list[dict]
-    distances: list[float]
+    raw_context: dict[str, object]
 
     # Control
     retrieval_attempts: int
@@ -340,9 +337,8 @@ Selecciona el tipo de recuperación según la intención de la pregunta:
 
 ```python
 Literal[
-    "semantic_ranked",
-    "hybrid_ranked",
-    "metadata_exhaustive",
+    "hybrid",
+    "min_max",
     "count",
     "timeline",
 ]
@@ -350,26 +346,30 @@ Literal[
 
 | Pregunta | Modo previsto |
 | --- | --- |
-| Incendios parecidos al de Villablino | `semantic_ranked` |
-| Incendios activos relevantes en León | `hybrid_ranked` |
-| Todos los incendios de León | `metadata_exhaustive` |
+| Incendios parecidos al de Villablino | `hybrid` sin `where` |
+| Incendios activos relevantes en León | `hybrid` con `where` |
+| ¿Cuál es la última fecha registrada? | `min_max`, operación `max` |
 | ¿Cuántos incendios hubo en julio? | `count` |
 | ¿Cómo evolucionó Villablino? | `timeline` |
 
-Esto evita utilizar siempre `top_k`. Las preguntas sobre todos los registros,
-recuentos o evoluciones necesitan `collection.get()` o una recuperación
-específica, no únicamente vecinos semánticos.
+`RetrievalMode` conserva además `operation` para `min_max` y `count_target`
+para distinguir incendios, snapshots e informes. Esto evita utilizar siempre
+`top_k`: los extremos y recuentos se calculan de forma exacta en SQLite.
 
 ### 6.9. `retrieve_from_chroma`
 
 Ejecuta el plan validado:
 
-- `collection.query()` para ranking semántico o híbrido;
-- `collection.get()` para recuperación exhaustiva y recuentos;
-- recuperación y orden temporal para evoluciones.
+- `retrieve()` utiliza `collection.query()` para ranking semántico o híbrido;
+- `retrieve_min_max()` calcula el extremo filtrado en SQLite y recupera los
+  documentos seleccionados mediante `collection.get(ids=...)`;
+- `retrieve_count()` ejecuta el recuento exacto en SQLite sin cargar documentos
+  ni embeddings;
+- la recuperación y orden temporal para evoluciones queda pendiente.
 
-El nodo registra el `where`, modo, número de resultados, IDs, distancias y
-metadatos devueltos.
+Las ramas devuelven el mismo `RetrievalResult`, con el modo, IDs, documentos,
+metadatos, distancias y agregado opcional. El nodo registrará también el
+`where`, la operación o el objetivo de recuento.
 
 ### 6.10. `evaluate_context`
 
@@ -571,7 +571,8 @@ No se implementará todo el grafo a la vez.
 8. Crear un conjunto inicial de preguntas de evaluación.
 9. ~~Corregir los imports internos y construir `rag_graph.py`.~~
 10. ~~Serializar de forma segura los modelos Pydantic almacenados en el estado.~~
-11. Añadir la selección de modo de retrieval.
+11. Integrar en el grafo la selección de modo y los retrievals `min_max` y
+    `count`, ya implementados y probados como funciones independientes.
 12. Desacoplar el inspector de checkpoints de BGE-M3 y Chroma.
 13. Añadir evaluación de contexto y un único reintento.
 14. ~~Incorporar generación fundamentada.~~
@@ -587,8 +588,7 @@ Quedan por determinar mediante experimentación:
 - umbral de mala similitud semántica;
 - tamaño inicial de `top_k`;
 - política de recuperación por cada entidad solicitada;
-- contrato de `ChooseRetrievalMode` para agregaciones, recuentos y consultas
-  exhaustivas;
+- contrato del futuro modo `timeline` y de posibles consultas exhaustivas;
 - formato final de citas;
 - almacenamiento de trazas y resultados de evaluación.
 

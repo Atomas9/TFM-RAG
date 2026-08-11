@@ -12,7 +12,11 @@ from miteco_rag.metadata_store import (
     create_schema,
     sync_snapshots,
 )
-from miteco_rag.retrieval_chroma import retrieve, retrieve_min_max
+from miteco_rag.retrieval_chroma import (
+    retrieve,
+    retrieve_count,
+    retrieve_min_max,
+)
 
 
 class FakeModel:
@@ -59,12 +63,14 @@ def make_snapshot(
     snapshot_id: str,
     report_date_number: int,
     province: str,
+    incident_key: str | None = None,
+    source_sha256: str | None = None,
 ) -> dict[str, object]:
     """Crea un snapshot mínimo para la base temporal."""
 
     return {
         "snapshot_id": snapshot_id,
-        "incident_key": f"incident-{snapshot_id}",
+        "incident_key": incident_key or f"incident-{snapshot_id}",
         "report_date_number": report_date_number,
         "country": "ES",
         "autonomous_community_normalized": "castilla y leon",
@@ -73,7 +79,7 @@ def make_snapshot(
         "status": "ACTIVO",
         "operational_status": "1",
         "source_file": f"parte-{report_date_number}.pdf",
-        "source_sha256": f"sha-{snapshot_id}",
+        "source_sha256": source_sha256 or f"sha-{snapshot_id}",
     }
 
 
@@ -86,8 +92,27 @@ def metadata_connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     sync_snapshots(
         connection,
         [
-            make_snapshot("leon-1", 20260713, "leon"),
-            make_snapshot("leon-2", 20260713, "leon"),
+            make_snapshot(
+                "leon-old",
+                20260712,
+                "leon",
+                incident_key="incident-a",
+                source_sha256="report-12",
+            ),
+            make_snapshot(
+                "leon-1",
+                20260713,
+                "leon",
+                incident_key="incident-a",
+                source_sha256="report-13",
+            ),
+            make_snapshot(
+                "leon-2",
+                20260713,
+                "leon",
+                incident_key="incident-b",
+                source_sha256="report-13",
+            ),
             make_snapshot("huelva-1", 20260801, "huelva"),
         ],
     )
@@ -178,3 +203,50 @@ def test_min_max_retrieve_without_matches_does_not_query_chroma(
         "aggregate": None,
     }
     assert collection.get_arguments is None
+
+
+@pytest.mark.parametrize(
+    ("count_target", "expected"),
+    [
+        ("incidents", 2),
+        ("snapshots", 3),
+        ("reports", 2),
+    ],
+)
+def test_retrieve_count_uses_common_contract(
+    metadata_connection: sqlite3.Connection,
+    count_target: str,
+    expected: int,
+) -> None:
+    result = retrieve_count(
+        metadata_connection=metadata_connection,
+        where={"province_normalized": "leon"},
+        count_target=count_target,  # type: ignore[arg-type]
+    )
+
+    assert result == {
+        "mode": "count",
+        "ids": [],
+        "documents": [],
+        "metadatas": [],
+        "distances": None,
+        "aggregate": {
+            "count_target": count_target,
+            "value": expected,
+        },
+    }
+
+
+def test_retrieve_count_preserves_exact_zero(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    result = retrieve_count(
+        metadata_connection=metadata_connection,
+        where={"province_normalized": "asturias"},
+        count_target="incidents",
+    )
+
+    assert result["aggregate"] == {
+        "count_target": "incidents",
+        "value": 0,
+    }

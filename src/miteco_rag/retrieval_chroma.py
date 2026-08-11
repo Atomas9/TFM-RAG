@@ -8,15 +8,15 @@ from sentence_transformers import SentenceTransformer
 from chromadb import Collection
 
 if __package__:
-    from .metadata_queries import get_extreme_snapshot_ids
+    from .metadata_queries import count_matches, get_extreme_snapshot_ids
 else:
-    from metadata_queries import get_extreme_snapshot_ids
+    from metadata_queries import count_matches, get_extreme_snapshot_ids
 
 
 class RetrievalResult(TypedDict):
     """Formato común de salida para todos los modos de recuperación."""
 
-    mode: Literal["hybrid", "min_max"]
+    mode: Literal["hybrid", "min_max", "count"]
     ids: list[str]
     documents: list[str]
     metadatas: list[dict[str, object]]
@@ -105,5 +105,31 @@ def retrieve_min_max(
         'aggregate': {
             'operation': operation,
             'report_date_number': report_date,
+        },
+    }
+
+
+def retrieve_count(
+        metadata_connection: sqlite3.Connection,
+        where: dict[str, object] | None,
+        count_target: Literal["incidents", "snapshots", "reports"],
+    ) -> RetrievalResult:
+    """Calcula un recuento exacto sin cargar documentos ni embeddings."""
+
+    count = count_matches(
+        connection=metadata_connection,
+        where=where,
+        count_target=count_target,
+    )
+
+    return {
+        'mode': 'count',
+        'ids': [],
+        'documents': [],
+        'metadatas': [],
+        'distances': None,
+        'aggregate': {
+            'count_target': count_target,
+            'value': count,
         },
     }

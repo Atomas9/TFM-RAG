@@ -34,13 +34,21 @@ operativa y fecha del parte. Tambien distingue consultas presentes e
 historicas: si se pregunta que incendios `hay`, `existen` o estan `activos`
 sin indicar fecha, utiliza el ultimo parte disponible.
 
+La recuperación dispone ya de un contrato plano común, `RetrievalResult`. La
+búsqueda híbrida utiliza Chroma, mientras que las operaciones exactas utilizan
+una base SQLite derivada del JSONL. `retrieve_min_max()` calcula primero el
+extremo dentro del conjunto filtrado y recupera después sus documentos por ID;
+`retrieve_count()` distingue incendios únicos, snapshots e informes sin cargar
+embeddings ni chunks.
+
 El MVP de generación está implementado en
 `src/miteco_rag/augmented_generator.py`. Formatea los resultados de Chroma,
 construye mensajes con instrucciones de grounding y genera la respuesta con
 `gemma4:31b-cloud` mediante Ollama. `src/miteco_rag/main.py` conecta por
-terminal clasificación, filtros, retrieval, contexto y generación. Si Chroma
-no devuelve documentos, el generador recibe el estado `NO_RECORDS` y redacta
-una ausencia limitada explícitamente al corpus consultado.
+terminal clasificación, filtros, retrieval, contexto y generación. El
+generador utiliza `WITH_DATA` cuando recibe documentos o un agregado exacto,
+incluido un recuento igual a cero, y `NO_DATA` cuando no hay información
+recuperada. Las ausencias se limitan explícitamente al corpus consultado.
 
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
@@ -58,12 +66,10 @@ anterior, valida su contenido y fecha, calcula su SHA-256 y lo registra junto a
 un manifiesto. GitHub Actions lo ejecuta dos veces al día y crea un commit solo
 cuando hay un documento nuevo o una revisión.
 
-El corpus bruto contiene actualmente trece partes. La validación inicial del
-parser y el índice existente se realizaron sobre ocho de ellos: la maquina de
-estados delimitó 48 bloques `Localizacion:`, 47 de Espana y uno de Portugal.
-Por decision del proyecto, ese indice conserva los 48 registros, incluido el
-de Portugal. Los PDF originales de MITECO se versionan; los resultados
-procesados y el indice local continúan fuera del control de versiones.
+El corpus bruto contiene actualmente 30 partes. La salida procesada y las bases
+locales utilizadas en esta fase contienen 149 snapshots hasta el parte del 1
+de agosto de 2026. Los PDF originales de MITECO se versionan; los resultados
+procesados, Chroma y SQLite continúan fuera del control de versiones.
 
 `snapshot_id` identifica de forma unica una observacion dentro de un parte.
 `incident_key` es una clave heuristica para agrupar observaciones que podrian
@@ -91,9 +97,10 @@ escritura solo se produce al ejecutar el archivo como programa.
 4. Un registro o snapshot por incendio y fecha de parte.
 5. Embeddings multilingues con `BAAI/bge-m3`.
 6. Persistencia vectorial y filtrado de metadatos con ChromaDB.
-7. Recuperacion de contexto y generacion con `gemma4:31b-cloud` mediante
+7. Consultas exactas y agregaciones sobre metadatos con SQLite.
+8. Recuperacion de contexto y generacion con `gemma4:31b-cloud` mediante
    Ollama.
-8. Orquestación controlada, rutas y checkpoints mediante LangGraph.
+9. Orquestación controlada, rutas y checkpoints mediante LangGraph.
 
 La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
@@ -109,6 +116,7 @@ La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTUR
 │   ├── raw/miteco/             PDF originales y manifiesto versionados
 │   ├── processed/              Registros parseados, no versionados
 │   ├── chroma/                 Indice vectorial local, no versionado
+│   ├── metadata/               Metadatos SQLite locales, no versionados
 │   └── checkpoints/            Trazas SQLite locales, no versionadas
 ├── .github/workflows/          Automatizacion diaria de la descarga
 ├── docs/                       Documentacion tecnica
@@ -280,11 +288,12 @@ y segura. Los modelos Pydantic se convierten mediante
 `NO GO`, `keep`, `replace` y `clarify` se han validado con SQLite y MsgPack en
 modo estricto, sin deserializar clases personalizadas.
 
-El siguiente incremento será un nodo que seleccione el tipo de consulta. La búsqueda
-vectorial `top_k` no sirve para operaciones globales como obtener la fecha
-máxima, contar todos los registros o construir una línea temporal. El workflow
-deberá distinguir recuperación semántica, híbrida, agregación de metadatos,
-recuento y consulta exhaustiva.
+El selector determinista `choose_retrieval_mode()` y las recuperaciones
+`min_max` y `count` ya funcionan como componentes independientes. La búsqueda
+vectorial `top_k` queda reservada para el modo híbrido; SQLite resuelve los
+extremos y recuentos después de aplicar `final_where`. El siguiente incremento
+será integrar la selección y estas dos ramas en `main.py` y en LangGraph, sin
+duplicar `generate_context()` ni `generate_answer()`.
 
 También queda pendiente desacoplar la inspección de checkpoints de
 `create_graph()`: actualmente `inspect_checkpoints.py` carga BGE-M3, Chroma y

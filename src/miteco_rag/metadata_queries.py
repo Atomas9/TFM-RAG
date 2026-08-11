@@ -45,6 +45,12 @@ EXTREME_FUNCTIONS = {
     "max": "MAX",
 }
 
+COUNT_EXPRESSIONS = {
+    "incidents": "COUNT(DISTINCT incident_key)",
+    "snapshots": "COUNT(*)",
+    "reports": "COUNT(DISTINCT source_sha256)",
+}
+
 
 def compile_where_to_sql(
     where: dict[str, object] | None,
@@ -60,6 +66,32 @@ def compile_where_to_sql(
 
     sql, parameters = _compile_expression(where)
     return sql, parameters
+
+
+def count_matches(
+    connection: sqlite3.Connection,
+    where: dict[str, object] | None,
+    count_target: Literal["incidents", "snapshots", "reports"],
+) -> int:
+    """Cuenta incendios, snapshots o informes que cumplen el filtro."""
+
+    if count_target not in COUNT_EXPRESSIONS:
+        raise ValueError(
+            "El objetivo debe ser 'incidents', 'snapshots' o 'reports'."
+        )
+
+    where_sql, parameters = compile_where_to_sql(where)
+    count_expression = COUNT_EXPRESSIONS[count_target]
+    query = (
+        f"SELECT {count_expression} AS value "
+        "FROM fire_snapshots"
+    )
+
+    if where_sql:
+        query += f" WHERE {where_sql}"
+
+    row = connection.execute(query, parameters).fetchone()
+    return int(row[0])
 
 
 def get_extreme_report_date(

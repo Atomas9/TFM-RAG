@@ -8,6 +8,7 @@ import pytest
 
 from miteco_rag.metadata_queries import (
     compile_where_to_sql,
+    count_matches,
     get_extreme_report_date,
     get_extreme_snapshot_ids,
     get_snapshot_ids_for_report_date,
@@ -24,12 +25,14 @@ def make_snapshot(
     report_date_number: int,
     province: str,
     status: str = "ACTIVO",
+    incident_key: str | None = None,
+    source_sha256: str | None = None,
 ) -> dict[str, object]:
     """Crea un snapshot mínimo para probar consultas SQL."""
 
     return {
         "snapshot_id": snapshot_id,
-        "incident_key": f"incident-{snapshot_id}",
+        "incident_key": incident_key or f"incident-{snapshot_id}",
         "report_date_number": report_date_number,
         "country": "ES",
         "autonomous_community_normalized": "castilla y leon",
@@ -38,7 +41,7 @@ def make_snapshot(
         "status": status,
         "operational_status": "1",
         "source_file": f"parte-{report_date_number}.pdf",
-        "source_sha256": f"sha-{snapshot_id}",
+        "source_sha256": source_sha256 or f"sha-{snapshot_id}",
     }
 
 
@@ -51,9 +54,28 @@ def metadata_connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     sync_snapshots(
         connection,
         [
-            make_snapshot("1", 20260701, "leon"),
-            make_snapshot("2", 20260715, "leon", "CONTROLADO"),
-            make_snapshot("5", 20260715, "leon"),
+            make_snapshot(
+                "1",
+                20260701,
+                "leon",
+                incident_key="incident-a",
+                source_sha256="report-1",
+            ),
+            make_snapshot(
+                "2",
+                20260715,
+                "leon",
+                "CONTROLADO",
+                incident_key="incident-a",
+                source_sha256="report-2",
+            ),
+            make_snapshot(
+                "5",
+                20260715,
+                "leon",
+                incident_key="incident-b",
+                source_sha256="report-2",
+            ),
             make_snapshot("3", 20260720, "palencia"),
             make_snapshot("4", 20260801, "huelva"),
         ],
@@ -298,3 +320,48 @@ def test_get_extreme_snapshot_ids_without_matches(
 
     assert report_date is None
     assert snapshot_ids == []
+
+
+@pytest.mark.parametrize(
+    ("count_target", "expected"),
+    [
+        ("incidents", 2),
+        ("snapshots", 3),
+        ("reports", 2),
+    ],
+)
+def test_count_matches_distinguishes_targets(
+    metadata_connection: sqlite3.Connection,
+    count_target: str,
+    expected: int,
+) -> None:
+    result = count_matches(
+        metadata_connection,
+        where={"province_normalized": "leon"},
+        count_target=count_target,  # type: ignore[arg-type]
+    )
+
+    assert result == expected
+
+
+def test_count_matches_returns_zero_without_matches(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    result = count_matches(
+        metadata_connection,
+        where={"province_normalized": "asturias"},
+        count_target="incidents",
+    )
+
+    assert result == 0
+
+
+def test_count_matches_rejects_unknown_target(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    with pytest.raises(ValueError, match="objetivo"):
+        count_matches(
+            metadata_connection,
+            where=None,
+            count_target="documents",  # type: ignore[arg-type]
+        )

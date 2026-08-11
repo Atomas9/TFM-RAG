@@ -58,6 +58,41 @@ def test_generate_context_includes_aggregate_and_documents() -> None:
     assert "[CHUNK 1]\nContenido del último parte" in context
 
 
+def test_zero_count_is_preserved_as_retrieved_data(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_chat(*, model, messages):
+        captured["messages"] = messages
+        return SimpleNamespace(
+            message=SimpleNamespace(content="No constan incendios.")
+        )
+
+    monkeypatch.setattr(augmented_generator.ollama, "chat", fake_chat)
+
+    raw_context = {
+        "mode": "count",
+        "ids": [],
+        "documents": [],
+        "metadatas": [],
+        "distances": None,
+        "aggregate": {
+            "count_target": "incidents",
+            "value": 0,
+        },
+    }
+    context = augmented_generator.generate_context(raw_context)
+
+    augmented_generator.generate_answer(
+        query="¿Cuántos incendios hay en Oviedo?",
+        context=context,
+        where={"location_normalized": "oviedo"},
+    )
+
+    messages = captured["messages"]
+    assert "WITH_DATA" in messages[1]["content"]
+    assert '"value": 0' in messages[1]["content"]
+
+
 def test_empty_context_sends_filter_and_no_records_to_ollama(
     monkeypatch,
 ) -> None:
@@ -87,10 +122,10 @@ def test_empty_context_sends_filter_and_no_records_to_ollama(
     assert answer == "No constan registros en Oviedo."
 
     messages = captured["messages"]
-    assert "NO_RECORDS" in messages[1]["content"]
+    assert "NO_DATA" in messages[1]["content"]
     assert '"location_normalized": "oviedo"' in messages[1]["content"]
     assert '"report_date_number": 20260719' in messages[1]["content"]
-    assert "[No se recuperaron documentos.]" in messages[1]["content"]
+    assert "[No se recuperaron datos.]" in messages[1]["content"]
 
 
 def test_generate_answer_sends_question_and_context_to_ollama(
@@ -120,7 +155,7 @@ def test_generate_answer_sends_question_and_context_to_ollama(
     messages = captured["messages"]
     assert messages[0]["role"] == "system"
     assert messages[1]["role"] == "user"
-    assert "WITH_RECORDS" in messages[1]["content"]
+    assert "WITH_DATA" in messages[1]["content"]
     assert "¿Qué ocurrió en Villablino?" in messages[1]["content"]
     assert '"location_normalized": "villablino"' in messages[1]["content"]
     assert "[CHUNK 1]\nDatos del incendio" in messages[1]["content"]

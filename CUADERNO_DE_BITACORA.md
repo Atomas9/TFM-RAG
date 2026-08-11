@@ -984,3 +984,79 @@ distinguir como mínimo búsqueda semántica o híbrida, fecha máxima, recuento
 consulta exhaustiva y línea temporal. Las respuestas agregadas no dependerán
 de que el registro pertinente aparezca accidentalmente entre los `top_k`
 semánticos.
+
+## 2026-08-11 — Retrieval exacto con SQLite
+
+### Objetivo
+
+Evitar que preguntas globales o agregadas dependan de los `top_k` semánticos y
+preparar contratos comunes antes de ampliar el grafo.
+
+### Trabajo realizado
+
+- Se creó `retrieval_mode.py` con selección determinista de los modos
+  `hybrid`, `min_max`, `count` y `timeline`.
+- Las consultas de mínimos y máximos conservan la operación solicitada y los
+  recuentos distinguen `incidents`, `snapshots` y `reports` a partir del
+  sustantivo de la pregunta.
+- Se creó `metadata_store.py`, que construye
+  `data/metadata/miteco_metadata.sqlite` desde `fire_snapshots.jsonl` mediante
+  un `upsert` idempotente e índices por fecha, geografía e incidente.
+- JSONL, SQLite y Chroma se comprobaron con 149 snapshots coincidentes.
+- Se creó `metadata_queries.py` para traducir el `final_where` de Chroma a SQL
+  parametrizado. La lista cerrada de campos y operadores impide introducir
+  columnas u operaciones arbitrarias desde una salida LLM.
+- `get_extreme_report_date()` aplica primero los filtros y calcula después
+  `MIN` o `MAX`; `get_extreme_snapshot_ids()` recupera todos los empates de la
+  fecha extrema.
+- `count_matches()` utiliza `COUNT(DISTINCT incident_key)`, `COUNT(*)` o
+  `COUNT(DISTINCT source_sha256)` según el objetivo solicitado.
+- `retrieval_chroma.py` define ahora un `RetrievalResult` plano y común. El
+  retrieval híbrido normaliza la respuesta anidada de Chroma;
+  `retrieve_min_max()` combina SQLite con recuperación de documentos por ID;
+  `retrieve_count()` devuelve un agregado exacto sin cargar Chroma ni BGE-M3.
+- `generate_context()` incorpora resultados estructurados y chunks con una
+  única función. `generate_answer()` utiliza los estados generales
+  `WITH_DATA` y `NO_DATA`, por lo que un recuento exacto igual a cero continúa
+  siendo información válida.
+- La base de metadatos se añadió al `.gitignore` y se documentó como artefacto
+  local regenerable, separado de los checkpoints de LangGraph.
+
+### Validación
+
+- La fecha máxima de una provincia se calcula dentro de los registros ya
+  filtrados, no a partir de la fecha máxima global.
+- SQLite utilizó los índices `idx_fire_report_date` e
+  `idx_fire_province_date` en las consultas de extremos comprobadas.
+- Los IDs obtenidos para la fecha máxima de León coincidieron con los
+  documentos recuperados por Chroma.
+- Sobre la base actual, León contiene 14 `incident_key`, 27 snapshots y 15
+  informes distintos, lo que confirma que los tres recuentos no se mezclan.
+- Las pruebas cubren filtros SQL anidados, parametrización, operaciones
+  inválidas, empates de fecha, ausencia de resultados y recuentos iguales a
+  cero.
+- La suite completa finalizó con 108 pruebas superadas y cinco advertencias
+  externas de SWIG.
+
+### Decisiones y pendientes
+
+- El `final_where` conserva la sintaxis de Chroma como representación común;
+  solo las funciones SQL lo traducen internamente.
+- La eliminación de filas SQLite obsoletas cuando desaparezca un snapshot del
+  JSONL queda aplazada.
+- `timeline` está identificado por el selector, pero todavía no dispone de un
+  retrieval específico.
+- No se han conectado aún `min_max` y `count` a los puntos de entrada ni al
+  grafo.
+
+### Próxima sesión
+
+1. Cargar o inyectar la conexión de metadatos sin guardarla en `GraphState`.
+2. Ejecutar `choose_retrieval_mode()` en el flujo lineal y en LangGraph.
+3. Elegir entre `retrieve()`, `retrieve_min_max()` y `retrieve_count()` según
+   el plan calculado.
+4. Cambiar `raw_context` de `QueryResult` a `RetrievalResult` en el estado del
+   grafo.
+5. Conservar una única ruta posterior por `GenerateContext` y
+   `GenerateAnswer`.
+6. Añadir pruebas de routing antes de abordar el modo `timeline`.

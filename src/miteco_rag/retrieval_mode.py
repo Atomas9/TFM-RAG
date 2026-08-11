@@ -22,12 +22,17 @@ MAX_PATTERNS = (
     r"\b(?:parte|informe|registro|incendio|fuego)\s+mas\s+reciente\b",
 )
 
-COUNT_PATTERNS = (
-    r"\bcuantos?\s+(?:incendios?|fuegos?|registros?|partes?|informes?)\b",
-    r"\bnumero\s+(?:total\s+)?de\s+"
-    r"(?:incendios?|fuegos?|registros?|partes?|informes?)\b",
-    r"\b(?:total|cantidad)\s+de\s+"
-    r"(?:incendios?|fuegos?|registros?|partes?|informes?)\b",
+COUNT_PATTERN = re.compile(
+    r"\b(?:"
+    r"cuantos?"
+    r"|numero\s+(?:total\s+)?de"
+    r"|(?:total|cantidad)\s+de"
+    r")\s+"
+    r"(?P<target>"
+    r"incendios?|fuegos?"
+    r"|registros?|snapshots?"
+    r"|partes?|informes?"
+    r")\b"
 )
 
 TIMELINE_PATTERNS = (
@@ -36,6 +41,24 @@ TIMELINE_PATTERNS = (
     r"\bcomo\s+(?:ha\s+)?cambiado\b",
     r"\ba\s+lo\s+largo\s+del\s+tiempo\b",
 )
+
+
+CountTarget = Literal["incidents", "snapshots", "reports"]
+
+COUNT_TARGETS: dict[str, CountTarget] = {
+    "incendio": "incidents",
+    "incendios": "incidents",
+    "fuego": "incidents",
+    "fuegos": "incidents",
+    "registro": "snapshots",
+    "registros": "snapshots",
+    "snapshot": "snapshots",
+    "snapshots": "snapshots",
+    "parte": "reports",
+    "partes": "reports",
+    "informe": "reports",
+    "informes": "reports",
+}
 
 
 class RetrievalMode(BaseModel):
@@ -48,6 +71,7 @@ class RetrievalMode(BaseModel):
         "timeline",
     ]
     operation: Literal["min", "max"] | None = None
+    count_target: CountTarget | None = None
 
 
 def _matches(query: str, patterns: tuple[str, ...]) -> bool:
@@ -86,7 +110,19 @@ def is_min_max_query(query: str) -> bool:
 def is_count_query(query: str) -> bool:
     """Detecta consultas que solicitan un recuento."""
 
-    return _matches(query, COUNT_PATTERNS)
+    return get_count_target(query) is not None
+
+
+def get_count_target(query: str) -> CountTarget | None:
+    """Indica si deben contarse incendios, snapshots o informes."""
+
+    normalized_query = _normalize_query(query)
+    match = COUNT_PATTERN.search(normalized_query)
+
+    if match is None:
+        return None
+
+    return COUNT_TARGETS[match.group("target")]
 
 
 def is_timeline_query(query: str) -> bool:
@@ -107,8 +143,12 @@ def choose_retrieval_mode(query: str) -> RetrievalMode:
     if is_max_query(query):
         return RetrievalMode(mode="min_max", operation="max")
 
-    if is_count_query(query):
-        return RetrievalMode(mode="count")
+    count_target = get_count_target(query)
+    if count_target is not None:
+        return RetrievalMode(
+            mode="count",
+            count_target=count_target,
+        )
 
     if is_timeline_query(query):
         return RetrievalMode(mode="timeline")
