@@ -7,14 +7,12 @@ from miteco_rag import augmented_generator
 
 def test_generate_context_joins_numbered_chunks() -> None:
     raw_context = {
-        "ids": [["snapshot-1", "snapshot-2"]],
-        "documents": [["Contenido uno", "Contenido dos"]],
-        "metadatas": [[{}, {}]],
-        "distances": [[0.1, 0.2]],
-        "embeddings": None,
-        "uris": None,
-        "data": None,
-        "included": ["documents", "metadatas", "distances"],
+        "mode": "hybrid",
+        "ids": ["snapshot-1", "snapshot-2"],
+        "documents": ["Contenido uno", "Contenido dos"],
+        "metadatas": [{}, {}],
+        "distances": [0.1, 0.2],
+        "aggregate": None,
     }
 
     context = augmented_generator.generate_context(raw_context)
@@ -28,17 +26,36 @@ def test_generate_context_joins_numbered_chunks() -> None:
 
 def test_generate_context_returns_empty_string_without_documents() -> None:
     raw_context = {
-        "ids": [[]],
-        "documents": [[]],
-        "metadatas": [[]],
-        "distances": [[]],
-        "embeddings": None,
-        "uris": None,
-        "data": None,
-        "included": ["documents", "metadatas", "distances"],
+        "mode": "hybrid",
+        "ids": [],
+        "documents": [],
+        "metadatas": [],
+        "distances": [],
+        "aggregate": None,
     }
 
     assert augmented_generator.generate_context(raw_context) == ""
+
+
+def test_generate_context_includes_aggregate_and_documents() -> None:
+    raw_context = {
+        "mode": "min_max",
+        "ids": ["snapshot-1"],
+        "documents": ["Contenido del último parte"],
+        "metadatas": [{}],
+        "distances": None,
+        "aggregate": {
+            "operation": "max",
+            "report_date_number": 20260801,
+        },
+    }
+
+    context = augmented_generator.generate_context(raw_context)
+
+    assert "[RESULTADO ESTRUCTURADO]" in context
+    assert '"operation": "max"' in context
+    assert '"report_date_number": 20260801' in context
+    assert "[CHUNK 1]\nContenido del último parte" in context
 
 
 def test_empty_context_sends_filter_and_no_records_to_ollama(

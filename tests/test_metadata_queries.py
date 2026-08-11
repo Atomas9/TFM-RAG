@@ -1,8 +1,66 @@
 """Pruebas del compilador de filtros Chroma a SQL parametrizado."""
 
+from collections.abc import Iterator
+from pathlib import Path
+import sqlite3
+
 import pytest
 
-from miteco_rag.metadata_queries import compile_where_to_sql
+from miteco_rag.metadata_queries import (
+    compile_where_to_sql,
+    get_extreme_report_date,
+    get_extreme_snapshot_ids,
+    get_snapshot_ids_for_report_date,
+)
+from miteco_rag.metadata_store import (
+    connect_metadata_db,
+    create_schema,
+    sync_snapshots,
+)
+
+
+def make_snapshot(
+    snapshot_id: str,
+    report_date_number: int,
+    province: str,
+    status: str = "ACTIVO",
+) -> dict[str, object]:
+    """Crea un snapshot mínimo para probar consultas SQL."""
+
+    return {
+        "snapshot_id": snapshot_id,
+        "incident_key": f"incident-{snapshot_id}",
+        "report_date_number": report_date_number,
+        "country": "ES",
+        "autonomous_community_normalized": "castilla y leon",
+        "province_normalized": province,
+        "location_normalized": f"location-{snapshot_id}",
+        "status": status,
+        "operational_status": "1",
+        "source_file": f"parte-{report_date_number}.pdf",
+        "source_sha256": f"sha-{snapshot_id}",
+    }
+
+
+@pytest.fixture
+def metadata_connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    """Crea una base temporal con fechas y provincias diferentes."""
+
+    connection = connect_metadata_db(tmp_path / "metadata.sqlite")
+    create_schema(connection)
+    sync_snapshots(
+        connection,
+        [
+            make_snapshot("1", 20260701, "leon"),
+            make_snapshot("2", 20260715, "leon", "CONTROLADO"),
+            make_snapshot("5", 20260715, "leon"),
+            make_snapshot("3", 20260720, "palencia"),
+            make_snapshot("4", 20260801, "huelva"),
+        ],
+    )
+
+    yield connection
+    connection.close()
 
 
 def test_none_where_produces_no_sql_filter() -> None:
@@ -122,3 +180,121 @@ def test_invalid_filters_are_rejected(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         compile_where_to_sql(where)
+
+
+def test_global_minimum_report_date(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    result = get_extreme_report_date(
+        metadata_connection,
+        where=None,
+        operation="min",
+    )
+
+    assert result == 20260701
+
+
+def test_global_maximum_report_date(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    result = get_extreme_report_date(
+        metadata_connection,
+        where=None,
+        operation="max",
+    )
+
+    assert result == 20260801
+
+
+def test_filtered_maximum_report_date(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    result = get_extreme_report_date(
+        metadata_connection,
+        where={"province_normalized": "leon"},
+        operation="max",
+    )
+
+    assert result == 20260715
+
+
+def test_minimum_with_compound_filter(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    result = get_extreme_report_date(
+        metadata_connection,
+        where={
+            "$and": [
+                {
+                    "province_normalized": {
+                        "$in": ["leon", "palencia"]
+                    }
+                },
+                {"status": "ACTIVO"},
+            ]
+        },
+        operation="min",
+    )
+
+    assert result == 20260701
+
+
+def test_extreme_date_returns_none_without_matches(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    result = get_extreme_report_date(
+        metadata_connection,
+        where={"province_normalized": "asturias"},
+        operation="max",
+    )
+
+    assert result is None
+
+
+def test_invalid_extreme_operation_is_rejected(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    with pytest.raises(ValueError, match="'min' o 'max'"):
+        get_extreme_report_date(
+            metadata_connection,
+            where=None,
+            operation="average",  # type: ignore[arg-type]
+        )
+
+
+def test_get_snapshot_ids_for_date_applies_existing_filter(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    result = get_snapshot_ids_for_report_date(
+        metadata_connection,
+        where={"status": "ACTIVO"},
+        report_date_number=20260715,
+    )
+
+    assert result == ["5"]
+
+
+def test_get_extreme_snapshot_ids_returns_all_tied_records(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    report_date, snapshot_ids = get_extreme_snapshot_ids(
+        metadata_connection,
+        where={"province_normalized": "leon"},
+        operation="max",
+    )
+
+    assert report_date == 20260715
+    assert snapshot_ids == ["2", "5"]
+
+
+def test_get_extreme_snapshot_ids_without_matches(
+    metadata_connection: sqlite3.Connection,
+) -> None:
+    report_date, snapshot_ids = get_extreme_snapshot_ids(
+        metadata_connection,
+        where={"province_normalized": "asturias"},
+        operation="min",
+    )
+
+    assert report_date is None
+    assert snapshot_ids == []

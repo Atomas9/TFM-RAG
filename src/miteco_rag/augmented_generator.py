@@ -2,7 +2,10 @@ import json
 
 import ollama
 
-from chromadb.api.types import QueryResult
+if __package__:
+    from .retrieval_chroma import RetrievalResult
+else:
+    from retrieval_chroma import RetrievalResult
 
 OLLAMA_MODEL = 'gemma4:31b-cloud'
 SYSTEM_PROMPT = """
@@ -14,13 +17,16 @@ Recibirás:
 - la pregunta original del usuario;
 - el estado de la recuperación;
 - el filtro final de metadatos utilizado;
+- los resultados exactos calculados, cuando existan;
 - los documentos recuperados, cuando existan.
 
 Responde únicamente utilizando esos datos.
 
-CUANDO SE HAYAN RECUPERADO DOCUMENTOS
+CUANDO SE HAYAN RECUPERADO DATOS
 
-- Responde la pregunta utilizando exclusivamente los documentos recuperados.
+- Utiliza los resultados estructurados como valores exactos ya calculados.
+- Responde utilizando exclusivamente los resultados estructurados y los
+  documentos recuperados.
 - No inventes datos ni utilices conocimiento externo.
 - Indica la fecha del parte al que se refiere la información.
 - Cuando sea posible, menciona el archivo y la página de procedencia.
@@ -75,17 +81,26 @@ Estado de la recuperación:
 Filtro final aplicado:
 {where}
 
-Documentos recuperados:
+Resultados y documentos recuperados:
 {context}
 """.strip()
 
 
-def generate_context(raw_context: QueryResult) -> str:
-    documents = (raw_context.get('documents') or [[]])[0]
-    if not documents:
-        return ''
-
+def generate_context(raw_context: RetrievalResult) -> str:
     context_parts: list[str] = []
+
+    aggregate = raw_context.get('aggregate')
+    if aggregate is not None:
+        context_parts.append(
+            '[RESULTADO ESTRUCTURADO]\n'
+            + json.dumps(
+                aggregate,
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+
+    documents = raw_context.get('documents') or []
     for position, chunk in enumerate(documents, start = 1):
         context_parts.append(
             f'[CHUNK {position}]\n'

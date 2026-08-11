@@ -7,6 +7,9 @@ SQL segura y en su lista separada de parámetros.
 
 from __future__ import annotations
 
+import sqlite3
+from typing import Literal
+
 
 # Los nombres de columna no se pueden enviar como parámetros ``?``. Por eso
 # solo permitimos los campos que existen en la tabla ``fire_snapshots`` y que
@@ -37,6 +40,11 @@ LOGICAL_OPERATORS = {
     "$or": "OR",
 }
 
+EXTREME_FUNCTIONS = {
+    "min": "MIN",
+    "max": "MAX",
+}
+
 
 def compile_where_to_sql(
     where: dict[str, object] | None,
@@ -52,6 +60,95 @@ def compile_where_to_sql(
 
     sql, parameters = _compile_expression(where)
     return sql, parameters
+
+
+def get_extreme_report_date(
+    connection: sqlite3.Connection,
+    where: dict[str, object] | None,
+    operation: Literal["min", "max"],
+) -> int | None:
+    """Devuelve la fecha mínima o máxima que cumple el filtro recibido.
+
+    SQLite calcula el extremo dentro de la base de datos. Python solo recibe
+    el valor final, por lo que no es necesario cargar todos los snapshots.
+    """
+
+    if operation not in EXTREME_FUNCTIONS:
+        raise ValueError(
+            "La operación debe ser 'min' o 'max'."
+        )
+
+    where_sql, parameters = compile_where_to_sql(where)
+    sql_function = EXTREME_FUNCTIONS[operation]
+
+    query = (
+        f"SELECT {sql_function}(report_date_number) AS value "
+        "FROM fire_snapshots"
+    )
+
+    if where_sql:
+        query += f" WHERE {where_sql}"
+
+    row = connection.execute(query, parameters).fetchone()
+    value = row[0]
+
+    # MIN y MAX devuelven NULL cuando ninguna fila cumple el filtro.
+    if value is None:
+        return None
+
+    return int(value)
+
+
+def get_snapshot_ids_for_report_date(
+    connection: sqlite3.Connection,
+    where: dict[str, object] | None,
+    report_date_number: int,
+) -> list[str]:
+    """Devuelve los IDs que cumplen el filtro en una fecha concreta."""
+
+    where_sql, parameters = compile_where_to_sql(where)
+    conditions: list[str] = []
+
+    if where_sql:
+        conditions.append(f"({where_sql})")
+
+    conditions.append("report_date_number = ?")
+    parameters.append(report_date_number)
+
+    query = (
+        "SELECT snapshot_id "
+        "FROM fire_snapshots "
+        f"WHERE {' AND '.join(conditions)} "
+        "ORDER BY snapshot_id"
+    )
+
+    rows = connection.execute(query, parameters).fetchall()
+    return [str(row[0]) for row in rows]
+
+
+def get_extreme_snapshot_ids(
+    connection: sqlite3.Connection,
+    where: dict[str, object] | None,
+    operation: Literal["min", "max"],
+) -> tuple[int | None, list[str]]:
+    """Obtiene la fecha extrema y todos los snapshots de esa fecha."""
+
+    report_date_number = get_extreme_report_date(
+        connection=connection,
+        where=where,
+        operation=operation,
+    )
+
+    if report_date_number is None:
+        return None, []
+
+    snapshot_ids = get_snapshot_ids_for_report_date(
+        connection=connection,
+        where=where,
+        report_date_number=report_date_number,
+    )
+
+    return report_date_number, snapshot_ids
 
 
 def _compile_expression(
