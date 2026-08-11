@@ -30,6 +30,9 @@ Las pruebas previstas para el parser de PDF comprobaran:
 - que la conversion de metadatos elimina los valores `None` y conserva sus
   tipos simples;
 - que una segunda ejecucion con los mismos snapshots no duplica registros;
+- la creacion e idempotencia de la base SQLite de metadatos;
+- los indices SQL para fechas, ubicaciones e incidentes;
+- el rechazo de JSON invalido y snapshots sin campos obligatorios;
 - los filtros exactos por pais, ubicacion, provincia, estado y fecha;
 - una consulta semantica y otra combinada con filtros.
 

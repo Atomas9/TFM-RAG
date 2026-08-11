@@ -47,6 +47,8 @@ data/processed/**
 !data/processed/.gitkeep
 data/chroma/**
 !data/chroma/.gitkeep
+data/metadata/**
+!data/metadata/.gitkeep
 data/checkpoints/**
 !data/checkpoints/.gitkeep
 storage/

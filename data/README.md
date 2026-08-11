@@ -10,6 +10,7 @@ datos procesados y el índice vectorial continúan siendo locales.
   versionados en Git.
 - `processed/`: snapshots parseados, informes de validacion y JSONL.
 - `chroma/`: persistencia local de ChromaDB.
+- `metadata/`: base SQLite regenerable para filtros y consultas analiticas.
 - `checkpoints/`: trazas locales de LangGraph persistidas en SQLite.
 
 El descargador automático asigna a los nuevos PDF el patrón
@@ -25,3 +26,14 @@ No deben guardarse claves de API, tokens ni datos privados en esta carpeta.
 La base `checkpoints/langgraph.sqlite` tampoco se versiona porque puede
 contener preguntas, respuestas, documentos recuperados y estados técnicos de
 las conversaciones. Solo se conserva `.gitkeep` para mantener el directorio.
+
+La base `metadata/miteco_metadata.sqlite` se genera a partir de
+`processed/fire_snapshots.jsonl` y tampoco se versiona. Puede reconstruirse
+desde la raiz del repositorio con:
+
+```bash
+python src/miteco_rag/metadata_store.py
+```
+
+Esta base contiene metadatos de los incendios; no contiene los checkpoints ni
+la memoria de las conversaciones.
