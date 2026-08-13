@@ -1,7 +1,7 @@
-"""Versión didáctica del flujo principal utilizando LangGraph.
+"""Versión didáctica inicial del flujo principal utilizando LangGraph.
 
-Este archivo no sustituye a ``main.py``. Su objetivo es mostrar cómo las
-funciones que ya existen en el proyecto pueden conectarse mediante un grafo.
+Este archivo es material histórico y no forma parte del flujo vigente. Su
+objetivo es mostrar cómo se conectó la primera versión mediante un grafo.
 
 La idea fundamental de LangGraph es:
 

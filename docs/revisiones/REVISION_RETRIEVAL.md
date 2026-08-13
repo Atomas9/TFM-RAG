@@ -1,4 +1,4 @@
-# Revision del retrieval semantico e hibrido
+# Revisión del retrieval semántico e híbrido
 
 Fecha de revision: 2026-07-22.
 

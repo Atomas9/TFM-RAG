@@ -51,10 +51,10 @@ generador utiliza `WITH_DATA` cuando recibe documentos o un agregado exacto,
 incluido un recuento igual a cero, y `NO_DATA` cuando no hay información
 recuperada. Las ausencias se limitan explícitamente al corpus consultado.
 
-`src/miteco_rag/main.py` está temporalmente desactualizado: conserva el flujo
-lineal anterior, no cumple el contrato actual de `core.loader()` y todavía no
-integra las ramas exactas `min_max` y `count`. Hasta refactorizarlo, el punto de
-entrada válido del MVP es `main_langgraph.py`.
+El flujo lineal anterior se conserva como referencia académica en
+`src/miteco_rag/extras/main_lineal_obsoleto.py`. No cumple el contrato actual
+de `core.loader()` ni integra las ramas exactas `min_max` y `count`. El único
+punto de entrada vigente del MVP es `main_langgraph.py`.
 
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
@@ -116,6 +116,7 @@ La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTUR
 .
 ├── src/miteco_rag/             Codigo principal
 │   └── extras/                 Esqueletos y soluciones de referencia
+├── scripts/                    Utilidades manuales de inspeccion
 ├── tests/                      Pruebas automatizadas
 ├── notebooks/                  Apuntes y soluciones ejecutables paso a paso
 ├── data/
@@ -126,6 +127,7 @@ La decision completa esta documentada en [docs/ARQUITECTURA.md](docs/ARQUITECTUR
 │   └── checkpoints/            Trazas SQLite locales, no versionadas
 ├── .github/workflows/          Automatizacion diaria de la descarga
 ├── docs/                       Documentacion tecnica
+│   └── revisiones/             Revisiones historicas por fase
 ├── extras/                     Codigo y documentos anteriores de referencia
 ├── CUADERNO_DE_BITACORA.md     Historial diario del proyecto
 ├── requirements.txt            Dependencias compatibles
@@ -195,11 +197,11 @@ obsoletos que hayan desaparecido del JSONL.
 Para inspeccionar tres registros sin generar de nuevo los embeddings:
 
 ```bash
-python src/miteco_rag/chroma_tests.py
+python scripts/inspect_chroma.py
 ```
 
-Esta utilidad debe ejecutarse desde la raiz del repositorio porque su ruta a
-`data/chroma` es relativa al directorio de trabajo.
+La utilidad calcula la ruta desde su propio archivo, no genera embeddings y
+cierra el cliente de Chroma al terminar.
 
 ## Consultar el indice
 
@@ -317,8 +319,8 @@ anticipadas. El orden de trabajo actualizado es:
 3. Medir los costes de carga, retrieval y llamadas a Ollama antes de aplicar
    otras optimizaciones.
 
-Después se abordarán la conversación multiturno, la validación de salidas LLM,
-el modo `timeline` y la adaptación o retirada del `main.py` lineal.
+Después se abordarán la conversación multiturno, la validación de salidas LLM
+y el modo `timeline`. El flujo lineal obsoleto ya se conserva en `extras`.
 
 ## Probar el MVP
 
@@ -344,8 +346,8 @@ final, el resultado de recuperación, el contexto y la respuesta. Por ahora
 solicita una sola pregunta, pero `SqliteSaver` conserva sus checkpoints en
 `data/checkpoints/langgraph.sqlite`.
 
-No debe ejecutarse `src/miteco_rag/main.py` en el estado actual. Ese archivo
-documenta el flujo lineal anterior y se adaptará en una fase posterior.
+Las versiones lineales y didácticas anteriores están archivadas en
+`src/miteco_rag/extras/` y no deben utilizarse como puntos de entrada.
 
 ## Alcance inicial
 
@@ -369,25 +371,25 @@ La arquitectura acordada para el workflow con LLM y LangGraph se documenta en
 [docs/ARQUITECTURA_LANGGRAPH.md](docs/ARQUITECTURA_LANGGRAPH.md).
 
 La revisión del primer revisor LLM y sus pruebas pendientes se documenta en
-[docs/REVISION_REVISOR_QUERY_FILTERS.md](docs/REVISION_REVISOR_QUERY_FILTERS.md).
+[docs/revisiones/REVISION_REVISOR_QUERY_FILTERS.md](docs/revisiones/REVISION_REVISOR_QUERY_FILTERS.md).
 
 La revisión del filtro LLM, su traducción determinista y el bouncer está en
-[docs/REVISION_FILTRO_LLM_Y_BOUNCER.md](docs/REVISION_FILTRO_LLM_Y_BOUNCER.md).
+[docs/revisiones/REVISION_FILTRO_LLM_Y_BOUNCER.md](docs/revisiones/REVISION_FILTRO_LLM_Y_BOUNCER.md).
 
 La solucion comentada de la primera fase puede estudiarse y ejecutarse desde
 [notebooks/01_fase1_parseo_miteco.ipynb](notebooks/01_fase1_parseo_miteco.ipynb).
 
 La ultima revision del codigo desarrollado esta en
-[docs/REVISION_FASE_1.md](docs/REVISION_FASE_1.md).
+[docs/revisiones/REVISION_FASE_1.md](docs/revisiones/REVISION_FASE_1.md).
 
 La revision del indice vectorial esta en
-[docs/REVISION_EMBEDDINGS_CHROMA.md](docs/REVISION_EMBEDDINGS_CHROMA.md).
+[docs/revisiones/REVISION_EMBEDDINGS_CHROMA.md](docs/revisiones/REVISION_EMBEDDINGS_CHROMA.md).
 
 La revision del retrieval hibrido esta en
-[docs/REVISION_RETRIEVAL.md](docs/REVISION_RETRIEVAL.md).
+[docs/revisiones/REVISION_RETRIEVAL.md](docs/revisiones/REVISION_RETRIEVAL.md).
 
 La revisión del MVP generador está en
-[docs/REVISION_GENERADOR.md](docs/REVISION_GENERADOR.md).
+[docs/revisiones/REVISION_GENERADOR.md](docs/revisiones/REVISION_GENERADOR.md).
 
 Los apuntes sobre el propósito y el uso de cada dependencia están en
 [docs/apuntes/LIBRERIAS.md](docs/apuntes/LIBRERIAS.md).

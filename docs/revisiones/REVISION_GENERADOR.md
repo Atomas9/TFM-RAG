@@ -1,4 +1,4 @@
-# Revisión del generador aumentado
+# Revisión del generador aumentado inicial
 
 Fecha de revisión: 2026-07-24.
 
@@ -23,7 +23,8 @@ Este MVP todavía no incorpora el revisor LLM de filtros ni LangGraph.
 ## Archivos
 
 - `src/miteco_rag/augmented_generator.py`;
-- `src/miteco_rag/main.py`;
+- `src/miteco_rag/extras/main_lineal_obsoleto.py` — ubicación actual del
+  `main.py` lineal descrito en esta revisión histórica;
 - `src/miteco_rag/retrieval_chroma.py`;
 - `tests/test_augmented_generator.py`.
 
@@ -98,7 +99,7 @@ de una ausencia real o de una interpretación incorrecta de los filtros.
 
 ## Punto de entrada
 
-`main.py` solicita una pregunta por terminal y coordina:
+El antiguo `main.py` solicitaba una pregunta por terminal y coordinaba:
 
 ```python
 raw_context = retrieve(query=query, top_k=10)
@@ -109,8 +110,11 @@ answer = generate_answer(query=query, context=context)
 Puede ejecutarse desde la raíz mediante:
 
 ```bash
-python src/miteco_rag/main.py
+python src/miteco_rag/extras/main_lineal_obsoleto.py
 ```
+
+Este comando documenta la ubicación histórica actual, pero el archivo ya no
+es compatible con los contratos vigentes y no debe ejecutarse.
 
 ## Validación automatizada
 

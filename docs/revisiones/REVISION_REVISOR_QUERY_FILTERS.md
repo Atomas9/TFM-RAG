@@ -1,4 +1,4 @@
-# Revisión del revisor LLM de filtros
+# Revisión inicial del revisor LLM de filtros
 
 ## Objetivo
 

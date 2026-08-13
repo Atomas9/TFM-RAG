@@ -1,3 +1,9 @@
+"""Flujo lineal histórico anterior a la integración completa en LangGraph.
+
+Este archivo se conserva como referencia académica. Está desactualizado y no
+debe utilizarse como punto de entrada del MVP.
+"""
+
 from core import loader
 from bouncer import bouncer
 from query_filters import build_deterministic_analysis

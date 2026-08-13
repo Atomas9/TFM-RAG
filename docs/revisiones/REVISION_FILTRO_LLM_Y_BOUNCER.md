@@ -1,4 +1,4 @@
-# Revisión del filtro LLM y del bouncer
+# Revisión del filtro LLM y del clasificador de entrada
 
 ## Objetivo
 

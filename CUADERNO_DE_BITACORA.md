@@ -1127,3 +1127,53 @@ los modos `min_max` y `count`. No debe ejecutarse hasta adaptarlo o retirarlo.
 - Después quedarán el historial conversacional, la gestión controlada de JSON
   inválido de Ollama, la validación de filtros LLM contra el catálogo, el modo
   `timeline` y la decisión de adaptar o mover `main.py` a `extras`.
+
+## 2026-08-13 — Limpieza y reorganización del repositorio
+
+### Objetivo
+
+Separar el código ejecutable de las versiones históricas y de las utilidades
+manuales antes de comenzar la indexación incremental.
+
+### Trabajo realizado
+
+- El antiguo `main.py` se archivó como
+  `src/miteco_rag/extras/main_lineal_obsoleto.py`. Conserva valor académico,
+  pero no es compatible con el contrato actual de `loader()`.
+- La primera demostración didáctica de LangGraph se trasladó a
+  `src/miteco_rag/extras/main_langgraph_inicial.py`.
+- `chroma_tests.py` dejó de estar mezclado con el código principal y pasó a
+  `scripts/inspect_chroma.py`. La utilidad calcula una ruta absoluta desde el
+  repositorio, utiliza una función `main()` y cierra el cliente de Chroma.
+- El inspector de trazas se trasladó a `scripts/inspect_checkpoints.py` y se
+  adaptó su cálculo de `PROJECT_ROOT`.
+- Las revisiones técnicas históricas se agruparon en `docs/revisiones/` y se
+  actualizaron los enlaces del README.
+- Se actualizó `src/miteco_rag/extras/README.md` para distinguir claramente el
+  flujo vigente de las implementaciones educativas o antiguas.
+
+### Decisiones
+
+- `main_langgraph.py` queda como único punto de entrada vigente del MVP.
+- No se elimina el material histórico porque permite explicar la evolución del
+  proyecto en el TFM.
+- No se añadieron nuevas reglas al `.gitignore`: ya cubre `__pycache__`,
+  `.pytest_cache`, configuración local de VS Code, resultados procesados,
+  Chroma, SQLite de metadatos y checkpoints.
+- Los PDF y su manifiesto siguen versionados por decisión de arquitectura; no
+  se encontraron PDF duplicados por SHA-256.
+
+### Validación
+
+- Los dos scripts nuevos se importan sin ejecutar automáticamente sus
+  funciones `main()`.
+- `scripts/inspect_chroma.py` abrió la colección local, mostró sus 149
+  registros y cerró correctamente el cliente.
+- Los archivos trasladados compilan correctamente.
+- La suite completa mantiene 119 pruebas superadas y cinco advertencias
+  externas de SWIG.
+
+### Siguiente paso
+
+Implementar la sincronización incremental de Chroma para calcular embeddings
+solo de snapshots nuevos o modificados.

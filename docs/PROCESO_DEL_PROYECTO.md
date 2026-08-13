@@ -394,7 +394,9 @@ El diseño completo se encuentra en
 | `src/miteco_rag/retrieval_chroma.py` | Retrieval híbrido, de extremos y de recuentos con contrato común |
 | `src/miteco_rag/extras/retrieval_chroma_solution.py` | Implementación de referencia |
 | `src/miteco_rag/augmented_generator.py` | Contexto y generación con Ollama |
-| `src/miteco_rag/main.py` | Punto de entrada del MVP |
+| `src/miteco_rag/main_langgraph.py` | Punto de entrada vigente del MVP |
+| `scripts/inspect_chroma.py` | Inspección manual de la colección local |
+| `scripts/inspect_checkpoints.py` | Inspección manual de las trazas persistidas |
 | `tests/` | Pruebas automatizadas |
 | `CUADERNO_DE_BITACORA.md` | Registro diario detallado |
 | `docs/ARQUITECTURA.md` | Decisiones técnicas de arquitectura |
@@ -408,7 +410,8 @@ Con el entorno `RAG-TFM` activado y los PDF en `data/raw/miteco`:
 ```bash
 python src/miteco_rag/parseo_y_chuncking.py
 python src/miteco_rag/embeddings_chroma.py
-python src/miteco_rag/main.py
+python src/miteco_rag/metadata_store.py
+python src/miteco_rag/main_langgraph.py
 ```
 
 Para validar el proyecto:
@@ -444,7 +447,9 @@ analysis = build_deterministic_analysis(query, catalog)
 
 El revisor recibe el objeto completo y ya no carga Chroma ni reconstruye el
 catálogo. El retrieval recibe el modelo, la colección y el filtro final como
-dependencias. `main.py` actúa como orquestador de estas fases.
+dependencias. En aquella versión, `main.py` actuaba como orquestador lineal de
+estas fases; actualmente se conserva en `src/miteco_rag/extras/` y la
+orquestación vigente reside en LangGraph.
 
 La trazabilidad estructurada se ha discutido, pero se implementará más
 adelante. Se separará el historial conversacional de los eventos técnicos del
@@ -686,14 +691,15 @@ en los nodos mediante `functools.partial`; el estado solo conserva el modo, el
 filtro y el `RetrievalResult` en forma de datos compatibles con checkpoints.
 El nodo de selección reconstruye `RetrievalMode` únicamente donde hace falta.
 
-`inspect_checkpoints.py` ya no construye el grafo para consultar el historial.
+`scripts/inspect_checkpoints.py` ya no construye el grafo para consultar el historial.
 Lee directamente los registros de `SqliteSaver`, muestra los canales guardados
 y evita cargar BGE-M3, Chroma y el catálogo durante una inspección.
 
-El punto de entrada lineal `src/miteco_rag/main.py` está desactualizado. Sigue
-esperando la firma anterior de `loader()` y no contiene el routing de
-`min_max` y `count`; por tanto, no debe utilizarse como ejecutable del MVP hasta
-que se adapte. El punto de entrada vigente es `main_langgraph.py`.
+El punto de entrada lineal desactualizado se archivó como
+`src/miteco_rag/extras/main_lineal_obsoleto.py`. Sigue esperando la firma
+anterior de `loader()` y no contiene el routing de `min_max` y `count`; se
+conserva solo como referencia. El punto de entrada vigente es
+`main_langgraph.py`.
 
 Quedan fuera de esta fase el retrieval `timeline`, el tratamiento defensivo de
 planes incompletos y la conversación multiturno. El siguiente trabajo técnico

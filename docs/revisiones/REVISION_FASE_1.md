@@ -1,4 +1,4 @@
-# Revisión de la fase 1
+# Revisión de la fase 1 del parser
 
 Fecha de revisión: 2026-07-20.
 

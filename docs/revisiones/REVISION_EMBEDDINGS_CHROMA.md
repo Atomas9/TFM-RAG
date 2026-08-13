@@ -1,11 +1,12 @@
-# Revision de embeddings y ChromaDB
+# Revisión de embeddings y ChromaDB
 
 Fecha de revision: 2026-07-21.
 
 Archivos revisados:
 
 - `src/miteco_rag/embeddings_chroma.py`;
-- `src/miteco_rag/chroma_tests.py`;
+- `scripts/inspect_chroma.py` — trasladado posteriormente desde
+  `src/miteco_rag/chroma_tests.py`;
 - `data/processed/fire_snapshots.jsonl`;
 - coleccion local `MITECO_fire_snapshots` de `data/chroma`.
 

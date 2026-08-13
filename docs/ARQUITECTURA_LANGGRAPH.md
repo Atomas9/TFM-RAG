@@ -602,8 +602,8 @@ La implementación actual abre Chroma y SQLite en `main_langgraph.py`, inyecta
 sus dependencias al construir el grafo y las cierra al salir. El nodo
 `ChooseRetrievalMode` ya gobierna las ramas `hybrid`, `min_max` y `count`; todas
 producen el mismo contrato `RetrievalResult` y convergen en la generación. El
-script lineal `main.py` conserva un contrato anterior y está explícitamente
-desactualizado hasta su futura adaptación.
+script lineal antiguo se conserva en `src/miteco_rag/extras/` como referencia
+histórica y no forma parte de la arquitectura ejecutable.
 
 ## 14. Referencias
 
