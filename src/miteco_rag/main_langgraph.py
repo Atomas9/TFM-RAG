@@ -2,6 +2,8 @@ from rag_graph import create_graph
 from pathlib import Path
 from uuid import uuid4
 from langgraph.checkpoint.sqlite import SqliteSaver
+from contextlib import closing
+from core import loader, load_metadata_connection
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHECKPOINT_PATH = (
@@ -26,15 +28,32 @@ def main() -> None:
 
     query = input('Escribe tu pregunta: ')
 
-    with SqliteSaver.from_conn_string(
-        str(CHECKPOINT_PATH)
-    ) as checkpointer:
-        graph = create_graph(checkpointer)
+    emb_model, chroma_client, collection, catalog = loader()
 
-        state = graph.invoke(
-            {'query': query},
-            config = config
-        )
+    try:
+        with closing(
+            load_metadata_connection()
+            ) as metadata_connection:
+
+
+            with SqliteSaver.from_conn_string(
+                str(CHECKPOINT_PATH)
+            ) as checkpointer:
+                graph = create_graph(
+                    checkpointer = checkpointer,
+                    emb_model = emb_model,
+                    collection = collection,
+                    catalog = catalog,
+                    metadata_connection = metadata_connection
+                )
+
+                state = graph.invoke(
+                    {'query': query},
+                    config = config
+                )
+
+    finally:
+        chroma_client.close()
 
     answer = state['answer']
 

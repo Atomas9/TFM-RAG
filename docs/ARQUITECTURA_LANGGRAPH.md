@@ -571,9 +571,9 @@ No se implementará todo el grafo a la vez.
 8. Crear un conjunto inicial de preguntas de evaluación.
 9. ~~Corregir los imports internos y construir `rag_graph.py`.~~
 10. ~~Serializar de forma segura los modelos Pydantic almacenados en el estado.~~
-11. Integrar en el grafo la selección de modo y los retrievals `min_max` y
-    `count`, ya implementados y probados como funciones independientes.
-12. Desacoplar el inspector de checkpoints de BGE-M3 y Chroma.
+11. ~~Integrar en el grafo la selección de modo y los retrievals `min_max` y
+    `count`.~~
+12. ~~Desacoplar el inspector de checkpoints de BGE-M3 y Chroma.~~
 13. Añadir evaluación de contexto y un único reintento.
 14. ~~Incorporar generación fundamentada.~~
 15. Incorporar historial conversacional.
@@ -597,6 +597,13 @@ Pydantic se convierten en datos compatibles con JSON antes de entrar en el
 estado y se reconstruyen dentro de los nodos cuando es necesario. El historial
 conversacional permanecerá en `messages` y no se mezclará con las decisiones
 técnicas de cada fase.
+
+La implementación actual abre Chroma y SQLite en `main_langgraph.py`, inyecta
+sus dependencias al construir el grafo y las cierra al salir. El nodo
+`ChooseRetrievalMode` ya gobierna las ramas `hybrid`, `min_max` y `count`; todas
+producen el mismo contrato `RetrievalResult` y convergen en la generación. El
+script lineal `main.py` conserva un contrato anterior y está explícitamente
+desactualizado hasta su futura adaptación.
 
 ## 14. Referencias
 

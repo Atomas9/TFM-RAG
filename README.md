@@ -42,13 +42,19 @@ extremo dentro del conjunto filtrado y recupera después sus documentos por ID;
 embeddings ni chunks.
 
 El MVP de generación está implementado en
-`src/miteco_rag/augmented_generator.py`. Formatea los resultados de Chroma,
+`src/miteco_rag/augmented_generator.py`. Formatea los resultados recuperados,
 construye mensajes con instrucciones de grounding y genera la respuesta con
-`gemma4:31b-cloud` mediante Ollama. `src/miteco_rag/main.py` conecta por
-terminal clasificación, filtros, retrieval, contexto y generación. El
+`gemma4:31b-cloud` mediante Ollama. `src/miteco_rag/main_langgraph.py` conecta
+por terminal clasificación, filtros, selección del modo de retrieval,
+recuperación, contexto y generación. El
 generador utiliza `WITH_DATA` cuando recibe documentos o un agregado exacto,
 incluido un recuento igual a cero, y `NO_DATA` cuando no hay información
 recuperada. Las ausencias se limitan explícitamente al corpus consultado.
+
+`src/miteco_rag/main.py` está temporalmente desactualizado: conserva el flujo
+lineal anterior, no cumple el contrato actual de `core.loader()` y todavía no
+integra las ramas exactas `min_max` y `count`. Hasta refactorizarlo, el punto de
+entrada válido del MVP es `main_langgraph.py`.
 
 Durante la revision se corrigieron dos accesos a `clean_text` para utilizar el
 atributo correcto, `cleaned_text`. El parser ya completa el recorrido de los
@@ -262,7 +268,10 @@ clasifica la intención principal y no la mera presencia de palabras como
 El mismo pipeline ya dispone de una primera orquestación con LangGraph en
 `src/miteco_rag/rag_graph.py`. El estado conserva por separado el filtro
 determinista y el filtro final; los nodos reutilizan las funciones existentes
-y las rutas distinguen `NO GO`, `keep`, `extend`, `replace` y `clarify`. Los
+y las rutas distinguen `NO GO`, `keep`, `extend`, `replace` y `clarify`. Tras
+resolver el filtro, otro nodo selecciona `hybrid`, `min_max`, `count` o la
+intención todavía pendiente `timeline`. Las tres ramas implementadas convergen
+en los mismos nodos de contexto y respuesta. Los
 recursos pesados se cargan una sola vez al construir el grafo y se inyectan en
 los nodos mediante `functools.partial`, sin guardarlos en el estado. El punto
 de entrada `src/miteco_rag/main_langgraph.py` ejecuta actualmente una pregunta
@@ -289,43 +298,45 @@ y segura. Los modelos Pydantic se convierten mediante
 modo estricto, sin deserializar clases personalizadas.
 
 El selector determinista `choose_retrieval_mode()` y las recuperaciones
-`min_max` y `count` ya funcionan como componentes independientes. La búsqueda
-vectorial `top_k` queda reservada para el modo híbrido; SQLite resuelve los
-extremos y recuentos después de aplicar `final_where`. El siguiente incremento
-será integrar la selección y estas dos ramas en `main.py` y en LangGraph, sin
-duplicar `generate_context()` ni `generate_answer()`.
+`min_max` y `count` ya están integrados en LangGraph. La búsqueda vectorial
+`top_k` queda reservada para el modo híbrido; SQLite resuelve los extremos y
+recuentos después de aplicar `final_where`. La conexión de metadatos se abre en
+el punto de entrada, se inyecta en los nodos y se cierra al terminar, igual que
+el cliente persistente de Chroma.
 
-También queda pendiente desacoplar la inspección de checkpoints de
-`create_graph()`: actualmente `inspect_checkpoints.py` carga BGE-M3, Chroma y
-el catálogo aunque solo necesite leer SQLite. Finalmente se incorporarán los
-mensajes conversacionales y la resolución de preguntas de seguimiento.
+El inspector de checkpoints también está desacoplado de `create_graph()` y lee
+directamente `SqliteSaver`, por lo que ya no carga BGE-M3, Chroma ni el
+catálogo. Los siguientes incrementos serán probar automáticamente el routing
+de los tres modos implementados, adaptar o retirar el `main.py` lineal e
+incorporar los mensajes conversacionales y las preguntas de seguimiento. El
+modo `timeline` permanece fuera del alcance de esta fase.
 
 ## Probar el MVP
 
-Con Ollama iniciado y el modelo Cloud disponible:
-
-```bash
-python src/miteco_rag/main.py
-```
-
-La versión equivalente orquestada mediante LangGraph se ejecuta con:
+Con Ollama iniciado y el modelo Cloud disponible, el punto de entrada vigente
+es la versión orquestada mediante LangGraph:
 
 ```bash
 python src/miteco_rag/main_langgraph.py
 ```
 
-El programa solicita una pregunta, recupera hasta diez chunks y muestra la
-respuesta fundamentada. La primera ejecución del embedding puede tardar por la
-carga de BGE-M3. El bouncer puede detener la consulta; `keep` conserva el
+El programa solicita una pregunta y muestra la respuesta fundamentada. En modo
+híbrido recupera hasta diez chunks; `min_max` recupera los documentos de la
+fecha extrema y `count` devuelve un agregado exacto. La primera ejecución del
+embedding puede tardar por la carga de BGE-M3. El bouncer puede detener la
+consulta; `keep` conserva el
 `deterministic_where`; `extend` y `replace` generan y traducen una propuesta
 nueva; `clarify` muestra los problemas detectados y termina antes del
 retrieval.
 
 `main_langgraph.py` conserva además en `GraphState` la decisión del bouncer,
 el análisis, la revisión, la propuesta opcional, los filtros determinista y
-final, el resultado de Chroma, el contexto y la respuesta. Por ahora solicita
-una sola pregunta y `MemorySaver` pierde sus checkpoints al terminar el
-proceso.
+final, el resultado de recuperación, el contexto y la respuesta. Por ahora
+solicita una sola pregunta, pero `SqliteSaver` conserva sus checkpoints en
+`data/checkpoints/langgraph.sqlite`.
+
+No debe ejecutarse `src/miteco_rag/main.py` en el estado actual. Ese archivo
+documenta el flujo lineal anterior y se adaptará en una fase posterior.
 
 ## Alcance inicial
 

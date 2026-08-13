@@ -659,8 +659,43 @@ una única `generate_context()` formatee tanto chunks como resultados exactos.
 El generador distingue `WITH_DATA` y `NO_DATA`; un recuento cero sigue siendo
 un dato calculado y no un fallo de recuperación.
 
-Las funciones ya están verificadas de manera independiente, pero el flujo
-lineal y LangGraph todavía ejecutan únicamente el retrieval híbrido. La próxima
-fase añadirá el plan de recuperación al estado, inyectará la conexión SQLite y
-hará converger las tres ramas implementadas en los mismos nodos de contexto y
-respuesta.
+Las funciones se verificaron primero de manera independiente. Después se
+integraron en LangGraph: el estado conserva el plan como un diccionario
+serializable, el routing selecciona `hybrid`, `min_max` o `count` y las tres
+ramas convergen en los mismos nodos `GenerateContext` y `GenerateAnswer`.
+
+## 23. Integración de los modos de retrieval en LangGraph
+
+`main_langgraph.py` es ahora el propietario de los recursos con ciclo de vida
+externo al estado. `core.loader()` devuelve el modelo de embeddings, el cliente
+de Chroma, la colección y el catálogo. El punto de entrada abre además la
+conexión SQLite de metadatos, construye el grafo con esas dependencias y cierra
+la conexión y el cliente al finalizar.
+
+```text
+final_where
+    ↓
+ChooseRetrievalMode
+    ├── hybrid  → Retrieve ─────────┐
+    ├── min_max → MinMaxRetrieve ──┼→ GenerateContext → GenerateAnswer
+    └── count   → CountRetrieve ───┘
+```
+
+Los objetos pesados o no serializables no entran en `GraphState`. Se inyectan
+en los nodos mediante `functools.partial`; el estado solo conserva el modo, el
+filtro y el `RetrievalResult` en forma de datos compatibles con checkpoints.
+El nodo de selección reconstruye `RetrievalMode` únicamente donde hace falta.
+
+`inspect_checkpoints.py` ya no construye el grafo para consultar el historial.
+Lee directamente los registros de `SqliteSaver`, muestra los canales guardados
+y evita cargar BGE-M3, Chroma y el catálogo durante una inspección.
+
+El punto de entrada lineal `src/miteco_rag/main.py` está desactualizado. Sigue
+esperando la firma anterior de `loader()` y no contiene el routing de
+`min_max` y `count`; por tanto, no debe utilizarse como ejecutable del MVP hasta
+que se adapte. El punto de entrada vigente es `main_langgraph.py`.
+
+Quedan fuera de esta fase el retrieval `timeline`, el tratamiento defensivo de
+planes incompletos y la conversación multiturno. El siguiente trabajo técnico
+será cubrir el routing del grafo con pruebas automatizadas y decidir si se
+actualiza o se retira el flujo lineal.

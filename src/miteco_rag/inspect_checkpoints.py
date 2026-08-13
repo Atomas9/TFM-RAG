@@ -2,9 +2,6 @@ from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from rag_graph import create_graph
-
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 CHECKPOINT_PATH = (
@@ -33,11 +30,8 @@ def main() -> None:
     with SqliteSaver.from_conn_string(
         str(CHECKPOINT_PATH)
     ) as checkpointer:
-
-        graph = create_graph(checkpointer)
-
         history = list(
-            graph.get_state_history(config)
+            checkpointer.list(config)
         )
 
         if not history:
@@ -47,17 +41,21 @@ def main() -> None:
             )
             return
 
-        for snapshot in reversed(history):
-            values = snapshot.values
+        # ``SqliteSaver.list()`` devuelve primero los checkpoints más
+        # recientes. Los invertimos para mostrarlos en orden cronológico.
+        for checkpoint_tuple in reversed(history):
+            checkpoint = checkpoint_tuple.checkpoint
+            metadata = checkpoint_tuple.metadata
+            values = checkpoint.get("channel_values", {})
 
             print("\n---------------------")
             print(
                 "Paso:",
-                snapshot.metadata.get("step"),
+                metadata.get("step"),
             )
             print(
-                "Siguiente nodo:",
-                snapshot.next,
+                "Canales actualizados:",
+                checkpoint.get("updated_channels", []),
             )
 
             if "decision" in values:

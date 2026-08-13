@@ -1060,3 +1060,45 @@ preparar contratos comunes antes de ampliar el grafo.
 5. Conservar una única ruta posterior por `GenerateContext` y
    `GenerateAnswer`.
 6. Añadir pruebas de routing antes de abordar el modo `timeline`.
+
+## 2026-08-13 — Integración de retrieval exacto en LangGraph
+
+### Objetivo
+
+Conectar las consultas híbridas, de extremos y de recuento en el grafo sin
+guardar conexiones ni objetos pesados dentro de `GraphState`.
+
+### Trabajo realizado
+
+- `core.loader()` devuelve también el cliente persistente de Chroma para que
+  el punto de entrada pueda cerrarlo explícitamente.
+- `main_langgraph.py` abre una única conexión a la base SQLite de metadatos y
+  la inyecta en el grafo junto con el modelo, la colección y el catálogo.
+- `rag_graph.py` incorpora `ChooseRetrievalMode`, `MinMaxRetrieve` y
+  `CountRetrieve`. La ruta `keep` pasa ahora por el selector, igual que las
+  rutas que generan o resuelven un filtro nuevo.
+- Las ramas `hybrid`, `min_max` y `count` comparten el contrato plano
+  `RetrievalResult` y convergen en `GenerateContext` y `GenerateAnswer`.
+- El plan de retrieval se guarda como diccionario serializable y se reconstruye
+  con Pydantic dentro de los nodos que necesitan el modelo validado.
+- `inspect_checkpoints.py` consulta directamente `SqliteSaver`; inspeccionar
+  una traza ya no carga el modelo BGE-M3, Chroma ni el catálogo.
+- El ciclo de vida de la conexión SQLite y del cliente Chroma queda fuera de
+  `GraphState` y se cierra al terminar la ejecución.
+
+### Estado de los puntos de entrada
+
+`main_langgraph.py` es el punto de entrada vigente del MVP. Por el contrario,
+`main.py` está desactualizado: espera tres valores de `loader()` cuando el
+contrato actual devuelve cuatro, no gestiona el cierre del cliente y no integra
+los modos `min_max` y `count`. No debe ejecutarse hasta adaptarlo o retirarlo.
+
+### Decisiones y próximos pasos
+
+- El modo `timeline` y los planes con campos opcionales incompletos se dejan
+  fuera de esta fase de forma intencionada.
+- Añadir pruebas automatizadas de routing para los tres modos implementados.
+- Decidir si se actualiza `main.py` como alternativa lineal o se conserva solo
+  como referencia histórica dentro de `extras`.
+- Después se incorporará el historial conversacional para permitir preguntas
+  sucesivas con contexto.

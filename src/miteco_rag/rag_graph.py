@@ -1,16 +1,16 @@
 from typing import TypedDict, Literal
 from chromadb import Collection
 from sentence_transformers import SentenceTransformer
+import sqlite3
 
-from core import loader
 from bouncer import bouncer
 from query_filters import DeterministicAnalysis, MetadataCatalog, build_deterministic_analysis
 from revisor_query_filters import FilterReview, revisor
 from generate_filter_LLM import FilterProposal, generate_filter_llm, resolve_final_where
-from retrieval_chroma import retrieve
+from retrieval_mode import RetrievalMode, choose_retrieval_mode
+from retrieval_chroma import RetrievalResult, retrieve, retrieve_min_max, retrieve_count
 from augmented_generator import generate_context, generate_answer 
 
-from chromadb.api.types import QueryResult
 from langgraph.graph import END, START, StateGraph
 from functools import partial
 
@@ -23,7 +23,8 @@ class GraphState(TypedDict, total = False):
     proposal: dict[str, object]
     deterministic_where: dict[str, object] | None
     final_where: dict[str, object] | None
-    raw_context: QueryResult
+    retrieval_mode: dict[str, object]
+    raw_context: RetrievalResult
     context: str
     answer: str
 
@@ -87,11 +88,31 @@ def resolve_where_node(state: GraphState):
     result = {'final_where': where}
     return result
 
+def choose_retrieval_mode_node(state: GraphState):
+    retrieval_mode = choose_retrieval_mode(state['query'])
+    result = {'retrieval_mode': retrieval_mode.model_dump(mode = 'json')}
+    return result
+
 def retrieve_node(state: GraphState, 
                   emb_model: SentenceTransformer,
                   collection: Collection,
                   top_k: int = 10):
     raw_context = retrieve(state['query'], emb_model, collection, state['final_where'], top_k)
+    result = {'raw_context': raw_context}
+    return result
+
+def min_max_retrieve_node(state: GraphState,
+                          collection: Collection,
+                          metadata_connection: sqlite3.Connection):
+    retrieval_mode = RetrievalMode.model_validate(state['retrieval_mode'])
+    raw_context = retrieve_min_max(collection, metadata_connection, state['final_where'], retrieval_mode.operation)
+    result = {'raw_context': raw_context}
+    return result
+
+def count_retrieve_node(state: GraphState,
+                        metadata_connection: sqlite3.Connection):
+    retrieval_mode = RetrievalMode.model_validate(state['retrieval_mode'])
+    raw_context = retrieve_count(metadata_connection, state['final_where'], retrieval_mode.count_target)
     result = {'raw_context': raw_context}
     return result
 
@@ -123,10 +144,24 @@ def route_after_reviewer(state: GraphState) -> Literal['generate', 'keep', 'end'
     else:
         return 'end'
 
+def route_after_retrieval_mode(state: GraphState):
+    mode = state['retrieval_mode']['mode']
+    if mode == 'hybrid':
+        return 'hybrid'
+    elif mode == 'min_max':
+        return 'min_max'
+    elif mode == 'count':
+        return 'count'
 
 
-def create_graph(checkpointer):
-    emb_model, collection, catalog = loader()
+
+def create_graph(
+        checkpointer,
+        emb_model: SentenceTransformer,
+        collection: Collection,
+        catalog: MetadataCatalog,
+        metadata_connection: sqlite3.Connection
+):
     top_k = 10
     deterministic_analysis_node_conf = partial(
         deterministic_analysis_node,
@@ -143,6 +178,17 @@ def create_graph(checkpointer):
         top_k = top_k
     )
 
+    min_max_retrieve_node_conf = partial(
+        min_max_retrieve_node,
+        collection = collection,
+        metadata_connection = metadata_connection
+    )
+
+    count_retrieve_node_conf = partial(
+        count_retrieve_node,
+        metadata_connection = metadata_connection
+    )
+
     graph = StateGraph(GraphState)
 
     graph.add_node('Bouncer', bouncer_node)
@@ -150,7 +196,10 @@ def create_graph(checkpointer):
     graph.add_node('Reviewer', reviewer_node)
     graph.add_node('GenerateFilter', generate_filter_node_conf)
     graph.add_node('ResolveWhere', resolve_where_node)
+    graph.add_node('RetrievalMode', choose_retrieval_mode_node)
     graph.add_node('Retrieve', retrieve_node_conf)
+    graph.add_node('MinMaxRetrieve', min_max_retrieve_node_conf)
+    graph.add_node('CountRetrieve', count_retrieve_node_conf)
     graph.add_node('GenerateContext', context_node)
     graph.add_node('GenerateAnswer', generate_answer_node)
 
@@ -169,15 +218,25 @@ def create_graph(checkpointer):
         route_after_reviewer,
         {
             'generate': 'GenerateFilter',
-            'keep': 'Retrieve',
+            'keep': 'RetrievalMode',
             'end': END
         }
     )
     graph.add_edge('GenerateFilter', 'ResolveWhere')
-    graph.add_edge('ResolveWhere', 'Retrieve')
+    graph.add_edge('ResolveWhere', 'RetrievalMode')
+    graph.add_conditional_edges(
+        'RetrievalMode',
+        route_after_retrieval_mode,
+        {
+            'hybrid': 'Retrieve',
+            'min_max': 'MinMaxRetrieve',
+            'count': 'CountRetrieve'
+        }
+    )
     graph.add_edge('Retrieve', 'GenerateContext')
+    graph.add_edge('MinMaxRetrieve', 'GenerateContext')
+    graph.add_edge('CountRetrieve', 'GenerateContext')
     graph.add_edge('GenerateContext', 'GenerateAnswer')
     graph.add_edge('GenerateAnswer', END)
 
     return graph.compile(checkpointer = checkpointer)
-
