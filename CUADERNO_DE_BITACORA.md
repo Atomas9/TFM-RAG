@@ -1097,8 +1097,33 @@ los modos `min_max` y `count`. No debe ejecutarse hasta adaptarlo o retirarlo.
 
 - El modo `timeline` y los planes con campos opcionales incompletos se dejan
   fuera de esta fase de forma intencionada.
-- Añadir pruebas automatizadas de routing para los tres modos implementados.
-- Decidir si se actualiza `main.py` como alternativa lineal o se conserva solo
-  como referencia histórica dentro de `extras`.
-- Después se incorporará el historial conversacional para permitir preguntas
-  sucesivas con contexto.
+- Se añadieron 11 pruebas automatizadas de routing. Comprueban que `hybrid`,
+  `min_max` y `count` llaman al nodo correcto, conservan `final_where` y
+  convergen en los mismos nodos de contexto y respuesta. También cubren
+  `keep`, `replace`, `NO GO` y `clarify` sin cargar Ollama, BGE-M3 ni bases
+  reales.
+- Los nodos exactos se prueban además de forma aislada: reconstruyen el plan
+  persistido y propagan correctamente `operation` o `count_target` junto con
+  el filtro final.
+- La suite completa finalizó con 119 pruebas superadas y las cinco advertencias
+  externas de SWIG ya conocidas.
+- Después se hará incremental la indexación de Chroma. La colección ya es
+  persistente y utiliza `upsert`, pero `embeddings_chroma.py` vuelve a calcular
+  actualmente los embeddings de todos los snapshots. Se compararán
+  `snapshot_id`, `source_sha256` y, si resulta necesario, un hash de
+  `chunk_text` antes de cargar BGE-M3.
+- Si no existen registros nuevos o modificados, la sincronización deberá
+  terminar sin cargar el modelo de embeddings. Si existen cambios, solo se
+  codificarán y actualizarán esos registros.
+- En una fase posterior se hará incremental también el parser mediante un
+  manifiesto con el SHA-256 del PDF y la versión del parser. Un informe se
+  reprocesará cuando sea nuevo, haya cambiado o cambie `parser_version`.
+- La eliminación de snapshots obsoletos de Chroma y SQLite deberá resolverse
+  antes de considerar completa la sincronización de informes revisados.
+- Una vez estabilizado el flujo incremental se medirán por separado la carga
+  de BGE-M3, la apertura y consulta de Chroma, el análisis de filtros y las
+  llamadas a Ollama. No se aplicarán optimizaciones generales sin esas
+  mediciones.
+- Después quedarán el historial conversacional, la gestión controlada de JSON
+  inválido de Ollama, la validación de filtros LLM contra el catálogo, el modo
+  `timeline` y la decisión de adaptar o mover `main.py` a `extras`.

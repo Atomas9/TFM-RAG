@@ -306,10 +306,19 @@ el cliente persistente de Chroma.
 
 El inspector de checkpoints también está desacoplado de `create_graph()` y lee
 directamente `SqliteSaver`, por lo que ya no carga BGE-M3, Chroma ni el
-catálogo. Los siguientes incrementos serán probar automáticamente el routing
-de los tres modos implementados, adaptar o retirar el `main.py` lineal e
-incorporar los mensajes conversacionales y las preguntas de seguimiento. El
-modo `timeline` permanece fuera del alcance de esta fase.
+catálogo. El routing de `hybrid`, `min_max` y `count` está cubierto mediante
+pruebas aisladas que también verifican la convergencia posterior y las salidas
+anticipadas. El orden de trabajo actualizado es:
+
+1. Hacer incremental la indexación: detectar snapshots nuevos o modificados
+   antes de cargar BGE-M3 y calcular únicamente sus embeddings.
+2. Hacer incremental el parseo mediante SHA-256 del PDF y `parser_version`, y
+   definir la eliminación de registros obsoletos en informes revisados.
+3. Medir los costes de carga, retrieval y llamadas a Ollama antes de aplicar
+   otras optimizaciones.
+
+Después se abordarán la conversación multiturno, la validación de salidas LLM,
+el modo `timeline` y la adaptación o retirada del `main.py` lineal.
 
 ## Probar el MVP
 

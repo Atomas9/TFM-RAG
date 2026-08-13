@@ -699,3 +699,9 @@ Quedan fuera de esta fase el retrieval `timeline`, el tratamiento defensivo de
 planes incompletos y la conversación multiturno. El siguiente trabajo técnico
 será cubrir el routing del grafo con pruebas automatizadas y decidir si se
 actualiza o se retira el flujo lineal.
+
+El routing se validó posteriormente con dependencias simuladas. Las pruebas
+recorren `hybrid`, `min_max` y `count`, comprueban su convergencia en contexto y
+respuesta, verifican la propagación de `final_where`, `operation` y
+`count_target`, y confirman que `NO GO` y `clarify` terminan antes del
+retrieval. La siguiente mejora pasa a ser la indexación incremental de Chroma.

@@ -81,6 +81,18 @@ Las pruebas previstas para el parser de PDF comprobaran:
 - la recuperación de documentos exactos por ID;
 - que `retrieve_count()` no necesita documentos ni embeddings.
 
+`test_rag_graph.py` valida el routing de LangGraph sin cargar Ollama, BGE-M3,
+Chroma ni SQLite reales:
+
+- selección integrada de las ramas `hybrid`, `min_max` y `count`;
+- llegada de las tres ramas a los nodos comunes de contexto y respuesta;
+- conservación de `final_where` hasta el retrieval correspondiente;
+- terminación anticipada de `NO GO` y `clarify`;
+- paso de `replace` por generación y resolución del filtro;
+- traducción de los tres modos a sus aristas condicionales;
+- reconstrucción del plan serializado dentro de los nodos exactos;
+- propagación de `operation` y `count_target` a sus retrievals.
+
 `test_retrieval_chroma_solution.py` usa dobles del modelo y de la coleccion
 para probar la implementación de referencia:
 
@@ -125,7 +137,7 @@ Estas pruebas comprobarán el contrato Python sin red. La calidad del prompt se
 evaluará por separado mediante un conjunto pequeño de llamadas reales y
 resultados esperados.
 
-La suite actual contiene 53 pruebas y se ejecuta con:
+La suite actual contiene 119 pruebas y se ejecuta con:
 
 ```bash
 python -m pytest -q
