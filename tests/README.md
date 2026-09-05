@@ -38,6 +38,13 @@ Las pruebas previstas para el parser de PDF comprobaran:
 
 ## Pruebas implementadas
 
+`test_parseo_y_chuncking.py` cubre los partes sin actuaciones:
+
+- un documento que declara explícitamente cero incendios produce cero bloques;
+- un documento sin bloques ni marcador de parte vacío sigue generando error;
+- el informe del parser conserva con recuento cero los PDF procesados sin
+  snapshots.
+
 `test_query_filters.py` cubre el analizador sin depender del corpus local:
 
 - inclusiones y exclusiones de provincias;
@@ -80,6 +87,14 @@ Las pruebas previstas para el parser de PDF comprobaran:
 - que `retrieve_min_max()` filtra antes de calcular el extremo;
 - la recuperación de documentos exactos por ID;
 - que `retrieve_count()` no necesita documentos ni embeddings.
+
+`test_embeddings_chroma.py` comprueba sin cargar BGE-M3:
+
+- estabilidad y cambio de la firma de indexacion;
+- lectura de firmas ya almacenadas en Chroma;
+- seleccion exclusiva de snapshots nuevos o modificados;
+- migracion de registros antiguos que todavia no tienen firma;
+- finalizacion sin cargar el modelo cuando el indice ya esta actualizado.
 
 `test_rag_graph.py` valida el routing de LangGraph sin cargar Ollama, BGE-M3,
 Chroma ni SQLite reales:
@@ -157,7 +172,7 @@ Estas pruebas comprobarán el contrato Python sin red. La calidad del prompt se
 evaluará por separado mediante un conjunto pequeño de llamadas reales y
 resultados esperados.
 
-La suite actual contiene 133 pruebas y se ejecuta con:
+La suite actual contiene 141 pruebas y se ejecuta con:
 
 ```bash
 python -m pytest -q

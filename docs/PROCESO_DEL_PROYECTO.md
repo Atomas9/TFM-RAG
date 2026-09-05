@@ -188,8 +188,10 @@ python src/miteco_rag/embeddings_chroma.py
 realiza tres operaciones:
 
 1. carga y valida cada línea de `fire_snapshots.jsonl`;
-2. convierte cada `chunk_text` en un embedding normalizado con `BAAI/bge-m3`;
-3. almacena ID, documento, embedding y metadatos en ChromaDB.
+2. compara la firma de cada snapshot con la almacenada en Chroma;
+3. convierte solamente los `chunk_text` nuevos o modificados en embeddings
+   normalizados con `BAAI/bge-m3`;
+4. almacena ID, documento, embedding, firma y metadatos en ChromaDB.
 
 La colección persistente se llama:
 
@@ -197,10 +199,11 @@ La colección persistente se llama:
 MITECO_fire_snapshots
 ```
 
-Los datos se almacenan localmente en `data/chroma`. Se utiliza `upsert`, por lo
-que una nueva ejecución inserta registros desconocidos y actualiza los que ya
-comparten ID. No elimina automáticamente registros antiguos que hayan
-desaparecido del JSONL.
+Los datos se almacenan localmente en `data/chroma`. Si no hay firmas pendientes,
+el script termina antes de cargar BGE-M3. Se utiliza `upsert`, por lo que una
+nueva ejecución inserta registros desconocidos y actualiza los que hayan
+cambiado. No elimina automáticamente registros antiguos que hayan desaparecido
+del JSONL; por ahora solo informa de ellos.
 
 ## 9. Primera búsqueda semántica
 
@@ -752,6 +755,28 @@ El bouncer acepta consultas implícitas propias de este asistente, como pregunta
 por la primera o última fecha registrada en una provincia, sin dejar de
 rechazar preguntas geográficas vagas o claramente ajenas a incendios.
 
-La fase queda validada con 133 pruebas automatizadas y varias conversaciones
-reales. Permanecen como mejoras posteriores la recuperación controlada ante una
-salida LLM inválida, la evaluación del contexto y la indexación incremental.
+La fase queda validada con 141 pruebas automatizadas y varias conversaciones
+reales. La indexación vectorial incremental se incorporó a continuación.
+
+## 25. Indexación vectorial incremental
+
+Cada snapshot guarda en Chroma una `index_signature` calculada a partir de sus
+datos, el modelo de embeddings, la normalización y una versión explícita del
+índice. Antes de cargar BGE-M3, el script compara las firmas del JSONL con las
+ya almacenadas:
+
+```text
+firma igual       → no hacer nada
+ID nuevo          → calcular embedding e insertar
+firma modificada  → recalcular embedding y actualizar
+ID desaparecido   → informar como obsoleto, sin eliminarlo
+```
+
+La migración inicial y la incorporación de los partes nuevos finalizaron con
+309 snapshots coincidentes en JSONL, Chroma y SQLite, cero pendientes y cero
+obsoletos. Una segunda ejecución terminó sin cargar el modelo de embeddings.
+
+Esto completa la indexación incremental de Chroma, pero no convierte todavía
+en incremental toda la ingesta: el parser reconstruye el JSONL desde todos los
+PDF y `metadata_store.py` vuelve a ejecutar un `upsert` de todas las filas. La
+eliminación segura de IDs obsoletos también permanece pendiente.

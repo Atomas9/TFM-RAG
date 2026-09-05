@@ -102,9 +102,10 @@ bloquean la exportacion; las advertencias se conservan en el informe.
   advertencias y errores de la ejecucion.
 
 La salida se reconstruye desde todos los PDF en cada ejecucion. Este enfoque es
-deliberado mientras el corpus sea pequeno y el esquema siga evolucionando. Una
-futura ingesta incremental comparara `source_sha256` y `parser_version` antes de
-decidir que documentos deben reprocesarse.
+deliberado mientras el corpus sea pequeno y el esquema siga evolucionando. La
+indexacion vectorial posterior ya es incremental; queda pendiente aplicar una
+estrategia equivalente al parser para decidir mediante `source_sha256` y
+`parser_version` que documentos deben reprocesarse.
 
 ## Indexacion vectorial implementada
 
@@ -114,15 +115,18 @@ proyecto:
 1. lee `data/processed/fire_snapshots.jsonl` linea a linea;
 2. reconstruye y valida cada linea como `FireSnapshot` con Pydantic;
 3. usa `chunk_text` como unidad de embedding y como documento recuperable;
-4. genera los vectores con `BAAI/bge-m3`, CPU, lotes de ocho y normalizacion;
-5. convierte los metadatos a tipos planos admitidos por Chroma y omite los
+4. compara una firma del snapshot y de la configuracion con los metadatos ya
+   almacenados;
+5. si existen registros nuevos o modificados, genera solo sus vectores con
+   `BAAI/bge-m3`, CPU, lotes de ocho y normalizacion;
+6. convierte los metadatos a tipos planos admitidos por Chroma y omite los
    valores `None`;
-6. abre una base persistente en `data/chroma`;
-7. inserta o actualiza la coleccion `MITECO_fire_snapshots` mediante
+7. abre una base persistente en `data/chroma`;
+8. inserta o actualiza la coleccion `MITECO_fire_snapshots` mediante
    `snapshot_id`.
 
-El indice actual incluye los 48 snapshots del JSONL: 47 de Espana y uno de
-Portugal. Esta inclusion es deliberada; `country` permite aplicar un filtro
+El indice actual incluye los 309 snapshots del JSONL: 303 de Espana y 6 de
+otros paises. Esta inclusion es deliberada; `country` permite aplicar un filtro
 posterior cuando una consulta deba limitarse a Espana.
 
 Chroma se configura con `embedding_function=None` porque los vectores se
@@ -130,11 +134,10 @@ calculan fuera de la base de datos. Las consultas semanticas deberan usar el
 mismo modelo y la misma normalizacion. Los vectores comprobados tienen 1.024
 dimensiones y norma unitaria.
 
-La escritura actual usa `get_or_create_collection()` y `upsert()`. Esto hace
-repetible la indexacion de los mismos snapshots, pero no constituye una
-sincronizacion completa: si un ID desaparece del JSONL, su registro anterior no
-se borra de Chroma. Antes de automatizar la ingesta habra que elegir entre
-recrear la coleccion o eliminar expresamente los IDs obsoletos.
+La escritura usa `get_or_create_collection()` y `upsert()`. Una firma SHA-256
+incluye el snapshot, el modelo, la normalizacion y `INDEX_VERSION`. Si todas las
+firmas coinciden, el proceso termina sin cargar BGE-M3. Si un ID desaparece del
+JSONL se informa como obsoleto, pero todavia no se borra de Chroma.
 
 ## Metadatos minimos
 

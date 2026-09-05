@@ -21,8 +21,9 @@ validado por Pydantic, con identificadores reproducibles, texto original y un
 
 La primera version del indice vectorial tambien esta implementada en
 `src/miteco_rag/embeddings_chroma.py`. El script carga y valida el JSONL,
-genera embeddings normalizados con `BAAI/bge-m3` y almacena cada
-`snapshot_id`, `chunk_text`, vector y conjunto plano de metadatos en la
+detecta los snapshots nuevos o modificados y solo entonces carga `BAAI/bge-m3`
+para generar sus embeddings normalizados. Cada registro conserva una firma de
+indexacion junto a su `snapshot_id`, `chunk_text`, vector y metadatos en la
 coleccion persistente `MITECO_fire_snapshots` de ChromaDB.
 
 La implementacion del alumno continua en `src/miteco_rag/retrieval_chroma.py`.
@@ -72,10 +73,12 @@ anterior, valida su contenido y fecha, calcula su SHA-256 y lo registra junto a
 un manifiesto. GitHub Actions lo ejecuta dos veces al día y crea un commit solo
 cuando hay un documento nuevo o una revisión.
 
-El corpus bruto contiene actualmente 30 partes. La salida procesada y las bases
-locales utilizadas en esta fase contienen 149 snapshots hasta el parte del 1
-de agosto de 2026. Los PDF originales de MITECO se versionan; los resultados
-procesados, Chroma y SQLite continúan fuera del control de versiones.
+El corpus bruto contiene actualmente 55 partes. La salida procesada, Chroma y
+SQLite están sincronizados con 309 snapshots hasta el parte del 4 de septiembre
+de 2026; el parte del 30 de agosto declara cero actuaciones y se conserva en el
+informe del parser con recuento cero. Los PDF originales de MITECO se
+versionan; los resultados procesados, Chroma y SQLite continúan fuera del
+control de versiones.
 
 `snapshot_id` identifica de forma unica una observacion dentro de un parte.
 `incident_key` es una clave heuristica para agrupar observaciones que podrian
@@ -188,11 +191,12 @@ Con el entorno `RAG-TFM` activado y el JSONL ya generado:
 python src/miteco_rag/embeddings_chroma.py
 ```
 
-La ejecucion utiliza CPU y procesa los textos en lotes de ocho. La primera
-carga del modelo puede tardar porque Sentence Transformers debe descargarlo o
-recuperarlo de su cache. El script emplea `upsert`: actualiza los IDs que ya
-existen e inserta los nuevos, pero no elimina automaticamente posibles IDs
-obsoletos que hayan desaparecido del JSONL.
+La ejecucion utiliza CPU y procesa los textos pendientes en lotes de ocho. La
+primera ejecucion tras incorporar la indexacion incremental recalcula una vez
+la coleccion anterior para guardar `index_signature`. A partir de la segunda,
+si nada ha cambiado, termina sin cargar BGE-M3. El script emplea `upsert` y
+detecta posibles IDs obsoletos, pero por ahora solo informa de ellos y no los
+elimina automaticamente.
 
 Para inspeccionar tres registros sin generar de nuevo los embeddings:
 
@@ -315,11 +319,12 @@ catálogo. El routing de `hybrid`, `min_max` y `count` está cubierto mediante
 pruebas aisladas que también verifican la convergencia posterior y las salidas
 anticipadas. El orden de trabajo actualizado es:
 
-1. Hacer incremental la indexación: detectar snapshots nuevos o modificados
-   antes de cargar BGE-M3 y calcular únicamente sus embeddings.
+1. ~~Hacer incremental la indexación vectorial de Chroma.~~
 2. Hacer incremental el parseo mediante SHA-256 del PDF y `parser_version`, y
    definir la eliminación de registros obsoletos en informes revisados.
-3. Medir los costes de carga, retrieval y llamadas a Ollama antes de aplicar
+3. Hacer incremental, si resulta necesario, la sincronización de SQLite; su
+   `upsert` completo actual no recalcula embeddings y sigue siendo barato.
+4. Medir los costes de carga, retrieval y llamadas a Ollama antes de aplicar
    otras optimizaciones.
 
 La conversación multiturno ya está integrada y cubierta por pruebas. Después

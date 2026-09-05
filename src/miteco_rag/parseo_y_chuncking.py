@@ -23,6 +23,7 @@ SNAPSHOTS_PATH = Path("data/processed/fire_snapshots.jsonl")
 REPORT_PATH = Path("data/processed/parser_report.json")
 LOCATION_PREFIXES = ("localizacion:",)
 SUMMARY_PREFIX = "actuaciones de los medios del ministerio" #texto que marca el resumen final del documento, cuando aparece, ya no hay más incendios
+NO_FIRE_REPORT_PREFIX = "sin actuacion en incendio"
 PARSER_VERSION = "0.1.0"
 
 # ------------------
@@ -279,7 +280,7 @@ class ParserReport(BaseModel):
 def clean_line(line: str) -> str:
     '''
     Elimina espacios sobrantes
-    \s+ significa uno o más espacios, tabuladores o saltos internos.
+    ``\\s+`` significa uno o más espacios, tabuladores o saltos internos.
     re.sub() pertenece al módulo re (expresiones regulares)
     Sintaxis: re.sub(patrón, reemplazo, cadena)
     .strip() elimina espacios al inicio y al final de la cadena
@@ -446,6 +447,14 @@ def is_summary_start(line: PDFLine) -> bool:
 
     return line.normalized_text.startswith(SUMMARY_PREFIX)
 
+def is_no_fire_report(lines: list[PDFLine]) -> bool:
+    """Reconoce un parte válido que declara cero actuaciones en incendios."""
+
+    return any(
+        line.normalized_text.startswith(NO_FIRE_REPORT_PREFIX)
+        for line in lines
+    )
+
 def split_fire_blocks(lines: list[PDFLine]) -> list[FireBlock]:
     """Delimita un bloque por incendio conservando la geografía vigente."""
 
@@ -552,6 +561,9 @@ def split_fire_blocks(lines: list[PDFLine]) -> list[FireBlock]:
 
     # Seguridad para documentos que terminen sin marcador de resumen.
     close_current_block()
+
+    if not blocks and is_no_fire_report(lines):
+        return []
 
     if not blocks:
         raise ValueError("No se encontraron bloques iniciados por Localización:")
@@ -925,18 +937,21 @@ def create_parser_report(
 ) -> ParserReport:
     """Resume recuentos por documento y país."""
 
-    snapshots_by_file = dict(
-        sorted(Counter(
-            snapshot.source_file
-            for snapshot in snapshots
-        ).items())
+    processed_file_paths = sorted(processed_files)
+    snapshot_counts = Counter(
+        snapshot.source_file
+        for snapshot in snapshots
     )
+    snapshots_by_file = {
+        path.name: snapshot_counts[path.name]
+        for path in processed_file_paths
+    }
 
     return ParserReport(
         generated_at=datetime.now(timezone.utc),
         processed_files=[
             path.name
-            for path in sorted(processed_files)
+            for path in processed_file_paths
         ],
         snapshots_by_file=snapshots_by_file,
         total_snapshots=len(snapshots),
@@ -1035,5 +1050,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

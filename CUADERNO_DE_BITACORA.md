@@ -1205,6 +1205,13 @@ completo con consultas reales.
   prohíbe devolver el literal `latest_report_date`.
 - Se ampliaron las pruebas del grafo, el bucle principal, `PrepareTurn`,
   `RewriteQuery` y la propagación de la fecha máxima.
+- `embeddings_chroma.py` calcula ahora una firma reproducible del snapshot, el
+  modelo y la configuración de indexación.
+- Antes de cargar BGE-M3 compara esas firmas con Chroma y selecciona solamente
+  snapshots nuevos o modificados. Los IDs obsoletos se muestran, pero no se
+  eliminan todavía.
+- El parser reconoce como válidos los partes que declaran explícitamente cero
+  actuaciones y los registra con recuento cero en `parser_report.json`.
 
 ### Validación
 
@@ -1216,8 +1223,16 @@ completo con consultas reales.
   el bouncer y resuelta mediante `min_max`.
 - La consulta `¿Qué incendios activos hay en León?` conservó en el filtro final
   `report_date_number=20260801` y recuperó solo el último parte disponible.
-- La suite completa finalizó con 133 pruebas superadas y las cinco advertencias
+- La suite completa finalizó con 141 pruebas superadas y las cinco advertencias
   externas de SWIG ya conocidas.
+- La inspección previa a la migración encontró 149 snapshots pendientes y cero
+  registros obsoletos. No se cargó BGE-M3 ni se modificó Chroma durante esta
+  comprobación.
+- El corpus regenerado contiene 309 snapshots hasta el 4 de septiembre; 160
+  están pendientes de incorporarse a Chroma y no hay IDs obsoletos.
+- Tras ejecutar la indexación, JSONL, Chroma y SQLite contienen 309 registros;
+  no queda ninguna firma pendiente ni se ha detectado ningún ID obsoleto.
+- Una nueva ejecución del indexador finaliza sin cargar BGE-M3.
 
 ### Decisiones
 
@@ -1231,11 +1246,12 @@ completo con consultas reales.
 ### Pendiente
 
 - Definir una política controlada ante JSON o propuestas inválidas del LLM.
-- Implementar la indexación incremental de Chroma.
+- Hacer incremental el parser si el coste de reprocesar todos los PDF deja de
+  ser aceptable.
 - Añadir evaluación de suficiencia del contexto y decidir el futuro modo
   `timeline`.
 
 ### Siguiente paso
 
-Retomar la indexación incremental para evitar cargar BGE-M3 y recalcular
-embeddings cuando no existan snapshots nuevos o modificados.
+Definir la siguiente prioridad entre el parseo incremental, la recuperación
+controlada ante salidas LLM inválidas y la evaluación del contexto.
