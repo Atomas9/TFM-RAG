@@ -91,7 +91,27 @@ Chroma ni SQLite reales:
 - paso de `replace` por generación y resolución del filtro;
 - traducción de los tres modos a sus aristas condicionales;
 - reconstrucción del plan serializado dentro de los nodos exactos;
-- propagación de `operation` y `count_target` a sus retrievals.
+- propagación de `operation` y `count_target` a sus retrievals;
+- acumulación ordenada de mensajes durante dos turnos con el mismo
+  `thread_id`;
+- incorporación al historial de respuestas normales, `NO GO` y `clarify`.
+
+`test_prepare_turn.py` y `test_rewrite_query.py` comprueban:
+
+- selección del último mensaje del usuario;
+- limpieza del estado técnico sin duplicar el historial;
+- rechazo de conversaciones sin una pregunta válida;
+- ausencia de llamada a Ollama durante el primer turno;
+- envío limitado del historial en una pregunta de seguimiento;
+- extracción de la consulta reescrita y rechazo de respuestas vacías.
+
+`test_main_langgraph.py` ejecuta el bucle con recursos simulados y verifica:
+
+- carga única de modelo, colección, catálogo y conexión;
+- envío de cada pregunta mediante `messages`;
+- reutilización del mismo `thread_id`;
+- rechazo de entradas vacías y salida mediante `salir`;
+- cierre de Chroma y SQLite al finalizar.
 
 `test_retrieval_chroma_solution.py` usa dobles del modelo y de la coleccion
 para probar la implementación de referencia:
@@ -137,7 +157,7 @@ Estas pruebas comprobarán el contrato Python sin red. La calidad del prompt se
 evaluará por separado mediante un conjunto pequeño de llamadas reales y
 resultados esperados.
 
-La suite actual contiene 119 pruebas y se ejecuta con:
+La suite actual contiene 133 pruebas y se ejecuta con:
 
 ```bash
 python -m pytest -q

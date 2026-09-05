@@ -51,7 +51,14 @@ def bouncer_node(state: GraphState):
     decision = response.decision
     result = {'decision': decision}
     if decision == 'NO GO':
-        result['answer'] = 'Pregunta no relacionada con incendios'
+        answer = 'Pregunta no relacionada con incendios'
+        result['answer'] = answer
+        result['messages'] = [
+            {
+                'role': 'assistant',
+                'content': answer
+            }
+        ]
 
     return result
 
@@ -70,10 +77,17 @@ def reviewer_node(state: GraphState):
     result = {'review': review.model_dump(mode = 'json')}
     if review.action == 'clarify':
         issues = '\n'.join(f'- {issue}' for issue in review.issues)
-        result['answer'] = (
+        answer= (
             'La consulta necesita una aclaración:\n'
             f'{issues}'
         )
+        result['answer'] = answer
+        result['messages'] = [
+            {
+                'role': 'assistant',
+                'content': answer
+            }
+        ]
     if review.action == 'keep':
         result['final_where'] = state['deterministic_where']
 
@@ -137,7 +151,15 @@ def context_node(state: GraphState):
 
 def generate_answer_node(state: GraphState):
     answer = generate_answer(state['query'], state['context'], state['final_where'])
-    result = {'answer': answer}
+    result = {
+        'answer': answer,
+        'messages': [
+            {
+                'role': 'assistant',
+                'content': answer
+            }
+        ]
+    }
     return result
 
 # -------------

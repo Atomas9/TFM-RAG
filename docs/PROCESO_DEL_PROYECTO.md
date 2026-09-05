@@ -40,9 +40,9 @@ colección persistente de ChromaDB
 búsqueda semántica + filtros de metadatos
 ```
 
-El primer MVP ya genera una respuesta final mediante Ollama Cloud. La siguiente
-fase revisará los filtros con un LLM y orquestará progresivamente el workflow
-con LangGraph.
+El MVP genera respuestas mediante Ollama Cloud y orquesta con LangGraph la
+clasificación, revisión de filtros, selección del retrieval y recuperación. El
+punto de entrada mantiene además conversaciones de varios turnos.
 
 ## 2. Preparación del repositorio y del entorno
 
@@ -297,9 +297,13 @@ En este momento están completadas:
 - formateo del contexto recuperado;
 - generación fundamentada mediante `gemma4:31b-cloud`;
 - punto de entrada interactivo por terminal;
+- orquestación mediante LangGraph con rutas `hybrid`, `min_max` y `count`;
+- persistencia de checkpoints y mensajes mediante `SqliteSaver`;
+- preparación de cada turno y reescritura de consultas dependientes del
+  contexto conversacional;
 - pruebas automatizadas del parser, retrieval y generador.
 
-La suite actual contiene 53 pruebas y puede ejecutarse con:
+La suite actual contiene 133 pruebas y puede ejecutarse con:
 
 ```bash
 python -m pytest -q
@@ -318,8 +322,8 @@ La versión actual todavía tiene varios límites:
 - una búsqueda sin resultados no siempre significa que un incendio no
   existiera, sino que no consta en los partes disponibles;
 - todavía no se ha calibrado un umbral de distancia semántica;
-- el revisor, generador y bouncer todavía no disponen de pruebas automatizadas
-  con Ollama simulado;
+- faltan pruebas de contrato específicas para todas las posibles respuestas
+  inválidas del revisor, generador y bouncer;
 - la propuesta LLM valida campos, tipos, operadores y fechas, pero todavía no
   comprueba todos los valores contra el catálogo ni detecta duplicados y
   contradicciones entre condiciones;
@@ -701,13 +705,53 @@ anterior de `loader()` y no contiene el routing de `min_max` y `count`; se
 conserva solo como referencia. El punto de entrada vigente es
 `main_langgraph.py`.
 
-Quedan fuera de esta fase el retrieval `timeline`, el tratamiento defensivo de
-planes incompletos y la conversación multiturno. El siguiente trabajo técnico
-será cubrir el routing del grafo con pruebas automatizadas y decidir si se
-actualiza o se retira el flujo lineal.
+En aquel cierre de fase quedaron fuera el retrieval `timeline`, el tratamiento
+defensivo de planes incompletos y la conversación multiturno. Los párrafos
+siguientes documentan cómo se incorporaron posteriormente el routing probado y
+la memoria conversacional.
 
 El routing se validó posteriormente con dependencias simuladas. Las pruebas
 recorren `hybrid`, `min_max` y `count`, comprueban su convergencia en contexto y
 respuesta, verifican la propagación de `final_where`, `operation` y
 `count_target`, y confirman que `NO GO` y `clarify` terminan antes del
 retrieval. La siguiente mejora pasa a ser la indexación incremental de Chroma.
+
+## 24. Conversación multiturno y fecha del último parte
+
+`GraphState.messages` utiliza un reductor aditivo para conservar los mensajes
+de usuario y asistente. `main_langgraph.py` mantiene un bucle con el mismo
+`thread_id`, por lo que cada invocación puede recuperar el historial mediante
+`SqliteSaver`.
+
+Antes de procesar una pregunta se ejecutan dos pasos:
+
+```text
+messages → PrepareTurn → RewriteQuery → Bouncer → resto del RAG
+```
+
+`PrepareTurn` obtiene la última pregunta y limpia los campos técnicos de la
+consulta anterior. `RewriteQuery` deja intacta una pregunta autosuficiente y,
+cuando existe una referencia conversacional, utiliza Ollama para reconstruirla.
+Las pruebas reales confirmaron referencias como `allí`, `ese día`, `en
+Palencia` y `ambas provincias`, incluso al cambiar entre retrieval híbrido,
+`min_max` y `count`.
+
+Las salidas normales, `NO GO` y `clarify` también se añaden a `messages`. El
+estado técnico sigue separado del diálogo, aunque ambos queden registrados en
+los checkpoints para mantener trazabilidad.
+
+Una prueba real descubrió que el revisor podía considerar arbitraria la fecha
+asignada a preguntas de presente. Para evitarlo,
+`DeterministicAnalysis.latest_report_date` conserva la fecha máxima del
+catálogo. El revisor sabe ahora que ese valor describe el último parte
+indexado, no el día actual, y debe conservarlo cuando la consulta expresa
+actualidad. El generador recibe además la instrucción de utilizar el entero
+`YYYYMMDD` del catálogo y nunca el literal `latest_report_date`.
+
+El bouncer acepta consultas implícitas propias de este asistente, como preguntar
+por la primera o última fecha registrada en una provincia, sin dejar de
+rechazar preguntas geográficas vagas o claramente ajenas a incendios.
+
+La fase queda validada con 133 pruebas automatizadas y varias conversaciones
+reales. Permanecen como mejoras posteriores la recuperación controlada ante una
+salida LLM inválida, la evaluación del contexto y la indexación incremental.

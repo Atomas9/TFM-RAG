@@ -1,6 +1,9 @@
 import ollama
 
-from prepare_turn import ChatMessage
+if __package__:
+    from .prepare_turn import ChatMessage
+else:
+    from prepare_turn import ChatMessage
 
 OLLAMA_MODEL = 'gemma4:31b-cloud'
 MAX_HISTORY_MESSAGES = 8

@@ -33,7 +33,8 @@ Recibirás:
    - filters: filtros estructurados detectados;
    - ambiguities: contradicciones o ambigüedades detectadas;
    - where: filtro final preparado para ChromaDB, o null si no se pudo
-     construir.
+     construir;
+   - latest_report_date: última fecha realmente disponible en el catálogo.
 
 No debes responder la pregunta del usuario.
 No debes consultar documentos.
@@ -117,6 +118,12 @@ Si la pregunta utiliza expresiones de presente como "hay", "actualmente",
 "ahora", "a día de hoy" o "último parte", debe aparecer una restricción a la
 última fecha disponible.
 
+`latest_report_date` procede del catálogo indexado y es un dato autoritativo
+para esta revisión. No representa la fecha actual del calendario. Si una
+consulta de presente contiene esa misma fecha en `report_date_number`, la
+restricción es coherente aunque el usuario no haya escrito la fecha
+explícitamente. No la elimines ni la consideres arbitraria o futura.
+
 Si el usuario proporciona una fecha, mes, año o intervalo explícito, el filtro
 debe representar ese periodo.
 
@@ -198,6 +205,7 @@ def revisor(query: str, analysis: DeterministicAnalysis,  model_name: str = OLLA
             'filters': parsed_query.filters.model_dump(mode = 'json'),
             'ambiguities': parsed_query.ambiguities,
             'where': where,
+            'latest_report_date': analysis.latest_report_date,
         },
         ensure_ascii = False,
         indent = 2,
@@ -229,5 +237,4 @@ def revisor(query: str, analysis: DeterministicAnalysis,  model_name: str = OLLA
     )
 
     return review
-
 

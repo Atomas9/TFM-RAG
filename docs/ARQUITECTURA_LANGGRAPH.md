@@ -5,9 +5,9 @@ Fecha de decisión: 2026-07-23. Primera implementación: 2026-08-03.
 Este documento define la arquitectura acordada para incorporar LLM al RAG de
 incendios de MITECO. La primera versión funcional del grafo ya implementa la
 clasificación, el análisis determinista, la revisión de filtros, la corrección
-opcional, el retrieval y la generación. Las ramas de evaluación de contexto,
-reintento y conversación descritas más adelante siguen siendo evolución
-prevista.
+opcional, el retrieval, la generación y la conversación multiturno. Las ramas
+de evaluación de contexto y reintento descritas más adelante siguen siendo
+evolución prevista.
 
 El sistema se construirá como un **workflow controlado con LangGraph**. No todos
 los nodos utilizarán inteligencia artificial: las operaciones que puedan
@@ -518,21 +518,18 @@ devolver un error.
 ## 10. Persistencia y memoria
 
 La implementación utiliza `SqliteSaver` y un `thread_id`. Los checkpoints se
-conservan localmente después de cerrar Python, pero esto no crea por sí solo
-memoria conversacional. Más adelante se utilizará esa persistencia para
-preguntas consecutivas:
+conservan localmente después de cerrar Python y `GraphState.messages` mantiene
+el historial que necesitan las preguntas consecutivas:
 
 ```text
 Usuario: ¿Qué incendios hay en Castilla y León?
 Usuario: ¿Y cuáles están activos?
 ```
 
-En ese caso el estado conversacional deberá resolver que `cuáles` conserva el
-ámbito geográfico de la pregunta anterior. También deberá separar los mensajes
-que necesita el LLM de la traza técnica de nodos, filtros y documentos.
-
-La memoria se incorporará después de validar correctamente consultas
-independientes.
+`PrepareTurn` selecciona la nueva pregunta y limpia los resultados técnicos
+anteriores. `RewriteQuery` recibe una ventana limitada del historial y resuelve
+referencias como `cuáles`, `allí` o `ese día`. Los mensajes conversacionales se
+mantienen separados de la traza técnica de nodos, filtros y documentos.
 
 ## 11. Evaluación académica
 
@@ -576,7 +573,7 @@ No se implementará todo el grafo a la vez.
 12. ~~Desacoplar el inspector de checkpoints de BGE-M3 y Chroma.~~
 13. Añadir evaluación de contexto y un único reintento.
 14. ~~Incorporar generación fundamentada.~~
-15. Incorporar historial conversacional.
+15. ~~Incorporar historial conversacional.~~
 
 ## 13. Decisiones pendientes
 

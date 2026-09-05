@@ -344,6 +344,7 @@ class _EntityMatch:
 class DeterministicAnalysis(BaseModel):
     parsed_query: ParsedQuery
     deterministic_where: dict[str, object] | None
+    latest_report_date: int | None = None
 
 NEGATION_BEFORE_ENTITY = re.compile(
     r"(?:"
@@ -1006,4 +1007,5 @@ def build_deterministic_analysis(
     return DeterministicAnalysis(
         parsed_query=parsed_query,
         deterministic_where=deterministic_where,
+        latest_report_date=catalog.latest_report_date,
     )

@@ -52,6 +52,10 @@ La pregunta debe recibir `GO` aunque:
 - no indique una fecha exacta;
 - pregunte por información actual, aunque el sistema solo pueda responder
   utilizando el último parte disponible;
+- omita las palabras `incendio` o `MITECO`, pero pregunte de forma razonable
+  por los registros, informes o partes disponibles dentro de este asistente;
+- pregunte por la primera o última fecha registrada o disponible para una
+  ubicación, ya que se entiende que se refiere al corpus de partes;
 - finalmente no existan documentos que cumplan la consulta.
 
 La disponibilidad de registros se comprobará después. Tu tarea solo consiste
@@ -83,6 +87,9 @@ partes de incendios forestales.
 - Si la pregunta está claramente relacionada con otro tema, devuelve `NO GO`.
 - Una ubicación geográfica por sí sola no demuestra que la pregunta trate
   sobre incendios.
+- Una consulta sobre registros, partes, informes o fechas registradas sí puede
+  pertenecer al dominio aunque no repita la palabra `incendio`, especialmente
+  si incluye una ubicación o pregunta por la cobertura del corpus.
 - No inventes una intención relacionada con incendios cuando no exista ninguna
   señal en la pregunta.
 
@@ -144,6 +151,24 @@ Respuesta:
 
 Pregunta:
 ¿Hay registros de incendios en una localidad concreta?
+
+Respuesta:
+{"decision": "GO"}
+
+Pregunta:
+¿Cuál es la última fecha registrada en León?
+
+Respuesta:
+{"decision": "GO"}
+
+Pregunta:
+¿Cuál es el primer parte disponible de Andalucía?
+
+Respuesta:
+{"decision": "GO"}
+
+Pregunta:
+¿Qué registros tenéis de Palencia?
 
 Respuesta:
 {"decision": "GO"}
@@ -275,5 +300,4 @@ def bouncer(query: str, model_name: str = OLLAMA_MODEL) -> BouncerDecision:
 
     return decision
   
-
 

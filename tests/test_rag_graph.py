@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
 
 
 # ``rag_graph.py`` se ejecuta actualmente como script y utiliza imports locales
@@ -130,7 +131,16 @@ def test_keep_routes_to_expected_retrieval_and_converges(
         metadata_connection=object(),
     )
 
-    result = graph.invoke({"query": query})
+    result = graph.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": query,
+                }
+            ]
+        }
+    )
 
     assert result["retrieval_mode"]["mode"] == expected_mode
     assert result["final_where"] == expected_where
@@ -177,12 +187,21 @@ def test_no_go_stops_before_analysis_and_retrieval(
         metadata_connection=object(),
     )
 
-    result = graph.invoke({"query": "¿Qué hora es?"})
+    result = graph.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "¿Qué hora es?",
+                }
+            ]
+        }
+    )
 
     assert result["decision"] == "NO GO"
     assert result["answer"] == "Pregunta no relacionada con incendios"
-    assert "retrieval_mode" not in result
-    assert "raw_context" not in result
+    assert result["retrieval_mode"] is None
+    assert result["raw_context"] is None
 
 
 def test_clarify_stops_before_retrieval(
@@ -232,12 +251,21 @@ def test_clarify_stops_before_retrieval(
         metadata_connection=object(),
     )
 
-    result = graph.invoke({"query": "¿Te refieres a León o a Palencia?"})
+    result = graph.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "¿Te refieres a León o a Palencia?",
+                }
+            ]
+        }
+    )
 
     assert calls == ["bouncer", "analysis", "reviewer"]
     assert result["review"]["action"] == "clarify"
     assert result["answer"] == "La consulta necesita una aclaración"
-    assert "retrieval_mode" not in result
+    assert result["retrieval_mode"] is None
 
 
 def test_replace_resolves_where_before_selecting_retrieval(
@@ -331,7 +359,16 @@ def test_replace_resolves_where_before_selecting_retrieval(
     )
 
     result = graph.invoke(
-        {"query": "¿Cuántos incendios hubo en León y Andalucía?"}
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "¿Cuántos incendios hubo en León y Andalucía?"
+                    ),
+                }
+            ]
+        }
     )
 
     assert calls == ["generate_filter", "resolve_where", "count"]
@@ -454,3 +491,252 @@ def test_count_node_passes_target_and_final_where(
     )
 
     assert result == {"raw_context": expected_result}
+
+
+def test_same_thread_accumulates_messages_across_two_turns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El checkpointer conserva el diálogo y limpia el estado técnico."""
+
+    histories_seen_by_rewriter: list[list[dict[str, str]]] = []
+
+    def fake_rewrite_node(state):
+        history = [dict(message) for message in state["messages"]]
+        histories_seen_by_rewriter.append(history)
+        latest_query = history[-1]["content"]
+
+        if latest_query == "¿Y en Palencia?":
+            latest_query = "¿Qué incendios activos hay en Palencia?"
+
+        return {"query": latest_query}
+
+    def fake_bouncer_node(state):
+        return {"decision": "GO"}
+
+    def fake_analysis_node(state, catalog):
+        province = (
+            "palencia"
+            if "Palencia" in state["query"]
+            else "leon"
+        )
+        where = {"province_normalized": province}
+        return {
+            "analysis": {},
+            "deterministic_where": where,
+        }
+
+    def fake_reviewer_node(state):
+        return {
+            "review": {"action": "keep"},
+            "final_where": state["deterministic_where"],
+        }
+
+    def fake_mode_node(state):
+        return {
+            "retrieval_mode": {
+                "mode": "hybrid",
+                "operation": None,
+                "count_target": None,
+            }
+        }
+
+    def fake_retrieve_node(state, **dependencies):
+        return {
+            "raw_context": {
+                **EMPTY_RESULT,
+                "documents": [state["query"]],
+            }
+        }
+
+    def fake_context_node(state):
+        return {"context": state["raw_context"]["documents"][0]}
+
+    def fake_answer_node(state):
+        answer = f"Respuesta: {state['context']}"
+        return {
+            "answer": answer,
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": answer,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(rag_graph, "rewrite_query_node", fake_rewrite_node)
+    monkeypatch.setattr(rag_graph, "bouncer_node", fake_bouncer_node)
+    monkeypatch.setattr(
+        rag_graph,
+        "deterministic_analysis_node",
+        fake_analysis_node,
+    )
+    monkeypatch.setattr(rag_graph, "reviewer_node", fake_reviewer_node)
+    monkeypatch.setattr(
+        rag_graph,
+        "choose_retrieval_mode_node",
+        fake_mode_node,
+    )
+    monkeypatch.setattr(rag_graph, "retrieve_node", fake_retrieve_node)
+    monkeypatch.setattr(rag_graph, "context_node", fake_context_node)
+    monkeypatch.setattr(rag_graph, "generate_answer_node", fake_answer_node)
+
+    graph = rag_graph.create_graph(
+        checkpointer=MemorySaver(),
+        emb_model=object(),
+        collection=object(),
+        catalog=object(),
+        metadata_connection=object(),
+    )
+    config = {"configurable": {"thread_id": "conversation-test"}}
+
+    graph.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "¿Qué incendios activos hay en León?",
+                }
+            ]
+        },
+        config=config,
+    )
+    result = graph.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "¿Y en Palencia?",
+                }
+            ]
+        },
+        config=config,
+    )
+
+    assert [len(history) for history in histories_seen_by_rewriter] == [1, 3]
+    assert result["user_query"] == "¿Y en Palencia?"
+    assert result["query"] == "¿Qué incendios activos hay en Palencia?"
+    assert result["final_where"] == {"province_normalized": "palencia"}
+    assert result["messages"] == [
+        {
+            "role": "user",
+            "content": "¿Qué incendios activos hay en León?",
+        },
+        {
+            "role": "assistant",
+            "content": "Respuesta: ¿Qué incendios activos hay en León?",
+        },
+        {
+            "role": "user",
+            "content": "¿Y en Palencia?",
+        },
+        {
+            "role": "assistant",
+            "content": "Respuesta: ¿Qué incendios activos hay en Palencia?",
+        },
+    ]
+
+
+def test_bouncer_no_go_adds_answer_to_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Una respuesta NO GO queda disponible para el siguiente turno."""
+
+    class Decision:
+        decision = "NO GO"
+
+    monkeypatch.setattr(
+        rag_graph,
+        "bouncer",
+        lambda query: Decision(),
+    )
+
+    result = rag_graph.bouncer_node({"query": "¿Qué hora es?"})
+
+    assert result == {
+        "decision": "NO GO",
+        "answer": "Pregunta no relacionada con incendios",
+        "messages": [
+            {
+                "role": "assistant",
+                "content": "Pregunta no relacionada con incendios",
+            }
+        ],
+    }
+
+
+def test_reviewer_clarify_adds_answer_to_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Una aclaración también se incorpora al diálogo persistido."""
+
+    analysis = {
+        "parsed_query": {
+            "original_query": "¿León o Palencia?",
+            "normalized_query": "leon o palencia",
+            "semantic_query": "",
+            "filters": {},
+            "ambiguities": [],
+        },
+        "deterministic_where": None,
+    }
+    review = rag_graph.FilterReview(
+        action="clarify",
+        coherent=False,
+        sufficient=False,
+        issues=["No se puede determinar la provincia."],
+        explanation="Falta concretar la ubicación.",
+    )
+    monkeypatch.setattr(
+        rag_graph,
+        "revisor",
+        lambda query, deterministic_analysis: review,
+    )
+
+    result = rag_graph.reviewer_node(
+        {
+            "query": "¿León o Palencia?",
+            "analysis": analysis,
+        }
+    )
+
+    expected_answer = (
+        "La consulta necesita una aclaración:\n"
+        "- No se puede determinar la provincia."
+    )
+    assert result["answer"] == expected_answer
+    assert result["messages"] == [
+        {
+            "role": "assistant",
+            "content": expected_answer,
+        }
+    ]
+
+
+def test_generate_answer_node_adds_answer_to_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La respuesta RAG normal se devuelve y se añade al historial."""
+
+    monkeypatch.setattr(
+        rag_graph,
+        "generate_answer",
+        lambda query, context, where: "Respuesta fundamentada",
+    )
+
+    result = rag_graph.generate_answer_node(
+        {
+            "query": "Incendios en León",
+            "context": "Contexto recuperado",
+            "final_where": {"province_normalized": "leon"},
+        }
+    )
+
+    assert result == {
+        "answer": "Respuesta fundamentada",
+        "messages": [
+            {
+                "role": "assistant",
+                "content": "Respuesta fundamentada",
+            }
+        ],
+    }

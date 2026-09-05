@@ -26,8 +26,6 @@ def main() -> None:
         }
     }
 
-    query = input('Escribe tu pregunta: ')
-
     emb_model, chroma_client, collection, catalog = loader()
 
     try:
@@ -47,18 +45,41 @@ def main() -> None:
                     metadata_connection = metadata_connection
                 )
 
-                state = graph.invoke(
-                    {'query': query},
-                    config = config
-                )
+                print(f'ID de conversación: {conversation_id}')
+
+                while True:
+                    query = input(
+                        '\nEscribe tu pregunta '
+                        '("salir" para terminar): '
+                    ).strip()
+
+                    if query.lower() in {
+                        'salir',
+                        'exit',
+                        'quit'
+                    }:
+                        break
+
+                    if not query:
+                        print('La pregunta no puede estar vacía')
+                        continue
+
+                    state = graph.invoke(
+                        {
+                            'messages': [
+                                {
+                                    'role': 'user',
+                                    'content': query
+                                }
+                            ]
+                        },
+                        config = config
+                    )
+
+                    print(f"\n{state['answer']}")
 
     finally:
         chroma_client.close()
-
-    answer = state['answer']
-
-    print(f'\n{answer}')
-    print(f'\nID de conversación: {conversation_id}')
 
 if __name__ == '__main__':
     main()

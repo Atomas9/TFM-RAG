@@ -276,9 +276,12 @@ intención todavía pendiente `timeline`. Las tres ramas implementadas convergen
 en los mismos nodos de contexto y respuesta. Los
 recursos pesados se cargan una sola vez al construir el grafo y se inyectan en
 los nodos mediante `functools.partial`, sin guardarlos en el estado. El punto
-de entrada `src/miteco_rag/main_langgraph.py` ejecuta actualmente una pregunta
-por terminal y utiliza `SqliteSaver` para conservar los checkpoints localmente
-en `data/checkpoints/langgraph.sqlite`.
+de entrada `src/miteco_rag/main_langgraph.py` mantiene una conversación por
+terminal y utiliza `SqliteSaver` para conservar sus mensajes y checkpoints
+localmente en `data/checkpoints/langgraph.sqlite`. Antes de cada turno,
+`prepare_turn.py` limpia el estado técnico anterior y `rewrite_query.py`
+convierte referencias como `allí`, `ese día` o `ambas provincias` en una
+consulta autosuficiente.
 
 ## Siguiente fase
 
@@ -319,7 +322,8 @@ anticipadas. El orden de trabajo actualizado es:
 3. Medir los costes de carga, retrieval y llamadas a Ollama antes de aplicar
    otras optimizaciones.
 
-Después se abordarán la conversación multiturno, la validación de salidas LLM
+La conversación multiturno ya está integrada y cubierta por pruebas. Después
+se abordarán la validación defensiva de salidas LLM, la evaluación del contexto
 y el modo `timeline`. El flujo lineal obsoleto ya se conserva en `extras`.
 
 ## Probar el MVP
@@ -331,20 +335,28 @@ es la versión orquestada mediante LangGraph:
 python src/miteco_rag/main_langgraph.py
 ```
 
-El programa solicita una pregunta y muestra la respuesta fundamentada. En modo
-híbrido recupera hasta diez chunks; `min_max` recupera los documentos de la
-fecha extrema y `count` devuelve un agregado exacto. La primera ejecución del
-embedding puede tardar por la carga de BGE-M3. El bouncer puede detener la
-consulta; `keep` conserva el
+El programa mantiene un bucle de conversación hasta que se escribe `salir` y
+reutiliza el mismo `thread_id` en todos los turnos. En modo híbrido recupera
+hasta diez chunks; `min_max` recupera los documentos de la fecha extrema y
+`count` devuelve un agregado exacto. La primera ejecución del embedding puede
+tardar por la carga de BGE-M3. El bouncer puede detener la consulta; `keep`
+conserva el
 `deterministic_where`; `extend` y `replace` generan y traducen una propuesta
 nueva; `clarify` muestra los problemas detectados y termina antes del
 retrieval.
 
-`main_langgraph.py` conserva además en `GraphState` la decisión del bouncer,
-el análisis, la revisión, la propuesta opcional, los filtros determinista y
-final, el resultado de recuperación, el contexto y la respuesta. Por ahora
-solicita una sola pregunta, pero `SqliteSaver` conserva sus checkpoints en
-`data/checkpoints/langgraph.sqlite`.
+`main_langgraph.py` conserva además en `GraphState` los mensajes, la pregunta
+original y su reescritura, la decisión del bouncer, el análisis, la revisión,
+la propuesta opcional, los filtros determinista y final, el resultado de
+recuperación, el contexto y la respuesta. `SqliteSaver` persiste los
+checkpoints en `data/checkpoints/langgraph.sqlite`.
+
+Las consultas sobre el presente se limitan a la fecha máxima realmente
+disponible en el catálogo. Esa fecha viaja dentro de
+`DeterministicAnalysis`, de modo que el revisor LLM puede reconocer su origen
+y no confundirla con la fecha actual del calendario. El bouncer también acepta
+consultas implícitas del dominio como `¿Cuál es la última fecha registrada en
+León?`, aunque no repitan la palabra `incendio`.
 
 Las versiones lineales y didácticas anteriores están archivadas en
 `src/miteco_rag/extras/` y no deben utilizarse como puntos de entrada.

@@ -138,7 +138,11 @@ FECHAS
 
 - Una fecha exacta utiliza `eq`.
 - Un intervalo utiliza una condición `gte` y otra `lte` dentro de un grupo AND.
-- Una referencia al último parte utiliza `latest_report_date`.
+- Una referencia al último parte utiliza como valor el entero contenido en
+  `catalog.latest_report_date`. Por ejemplo, si ese campo vale 20260801,
+  utiliza `value=20260801`.
+- Nunca utilices el texto literal `latest_report_date` como valor de una
+  condición.
 - No añadas una fecha de último parte si la pregunta es histórica.
 - No añadas el estado ACTIVO solo porque la pregunta utilice la palabra
   "incendios" o "fuegos".

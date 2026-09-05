@@ -6,6 +6,7 @@ from miteco_rag.query_filters import (
     MetadataCatalog,
     MetadataFilters,
     build_chroma_where,
+    build_deterministic_analysis,
     metadata_query,
     parse_metadata_filters,
 )
@@ -282,6 +283,14 @@ def test_catalog_records_latest_report_date(catalog: MetadataCatalog) -> None:
     assert catalog.report_dates == [20260712, 20260715]
     assert catalog.report_years == [2026]
     assert catalog.latest_report_date == 20260715
+
+
+def test_deterministic_analysis_keeps_latest_report_date(
+    catalog: MetadataCatalog,
+) -> None:
+    analysis = build_deterministic_analysis("Incendios actuales", catalog)
+
+    assert analysis.latest_report_date == 20260715
 
 
 def test_date_range(catalog: MetadataCatalog) -> None:

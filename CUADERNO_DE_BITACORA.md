@@ -1177,3 +1177,65 @@ manuales antes de comenzar la indexación incremental.
 
 Implementar la sincronización incremental de Chroma para calcular embeddings
 solo de snapshots nuevos o modificados.
+
+## 2026-09-05 — Conversación multiturno y fecha del último parte
+
+### Objetivo
+
+Permitir varias preguntas dentro de una misma conversación y validar el flujo
+completo con consultas reales.
+
+### Trabajo realizado
+
+- `main_langgraph.py` mantiene ahora un bucle hasta recibir `salir` y reutiliza
+  el mismo `thread_id` durante toda la conversación.
+- Se integraron `PrepareTurn` y `RewriteQuery` antes del bouncer. El primero
+  prepara el nuevo turno y el segundo reconstruye preguntas dependientes del
+  historial mediante Ollama.
+- Las respuestas normales, los rechazos `NO GO` y las solicitudes `clarify` se
+  incorporan a `GraphState.messages`.
+- Se corrigieron los imports de `rewrite_query.py` para permitir su uso como
+  módulo y como script del proyecto.
+- El bouncer acepta ahora consultas implícitas del dominio sobre registros,
+  partes y fechas, aunque no contengan literalmente la palabra `incendio`.
+- `DeterministicAnalysis` conserva `latest_report_date`. El revisor recibe ese
+  valor como dato autoritativo del catálogo y ya no elimina la fecha aplicada a
+  consultas de presente.
+- El prompt del generador exige usar la fecha real como entero `YYYYMMDD` y
+  prohíbe devolver el literal `latest_report_date`.
+- Se ampliaron las pruebas del grafo, el bucle principal, `PrepareTurn`,
+  `RewriteQuery` y la propagación de la fecha máxima.
+
+### Validación
+
+- Se probaron conversaciones reales con referencias como `en Palencia`, `ese
+  día`, `allí` y `ambas provincias`.
+- Las rutas `hybrid`, `min_max` y `count` conservaron correctamente el contexto
+  entre turnos.
+- La consulta `¿Cuál es la última fecha registrada en León?` fue aceptada por
+  el bouncer y resuelta mediante `min_max`.
+- La consulta `¿Qué incendios activos hay en León?` conservó en el filtro final
+  `report_date_number=20260801` y recuperó solo el último parte disponible.
+- La suite completa finalizó con 133 pruebas superadas y las cinco advertencias
+  externas de SWIG ya conocidas.
+
+### Decisiones
+
+- La fecha de actualidad es la máxima del corpus, no la fecha del calendario ni
+  una fecha que deba inferir el LLM.
+- Los recursos pesados continúan fuera de `GraphState`; el historial solo
+  contiene mensajes y datos serializables.
+- No se añade todavía un reintento de Ollama: se tratará como una mejora
+  defensiva independiente.
+
+### Pendiente
+
+- Definir una política controlada ante JSON o propuestas inválidas del LLM.
+- Implementar la indexación incremental de Chroma.
+- Añadir evaluación de suficiencia del contexto y decidir el futuro modo
+  `timeline`.
+
+### Siguiente paso
+
+Retomar la indexación incremental para evitar cargar BGE-M3 y recalcular
+embeddings cuando no existan snapshots nuevos o modificados.
