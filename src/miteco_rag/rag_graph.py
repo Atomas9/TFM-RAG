@@ -1,8 +1,11 @@
-from typing import TypedDict, Literal
+from typing import TypedDict, Literal, Annotated
+from operator import add
 from chromadb import Collection
 from sentence_transformers import SentenceTransformer
 import sqlite3
 
+from prepare_turn import ChatMessage, prepare_turn
+from rewrite_query import rewrite_query
 from bouncer import bouncer
 from query_filters import DeterministicAnalysis, MetadataCatalog, build_deterministic_analysis
 from revisor_query_filters import FilterReview, revisor
@@ -16,15 +19,17 @@ from functools import partial
 
 class GraphState(TypedDict, total = False):
     """Información que los nodos comparten durante una ejecución."""
+    messages: Annotated[list[ChatMessage], add]
+    user_query: str
     query: str
-    decision: Literal["GO", "NO GO"]
-    analysis: dict[str, object]
-    review: dict[str, object]
-    proposal: dict[str, object]
+    decision: Literal["GO", "NO GO"] | None
+    analysis: dict[str, object] | None
+    review: dict[str, object] | None
+    proposal: dict[str, object] | None
     deterministic_where: dict[str, object] | None
     final_where: dict[str, object] | None
-    retrieval_mode: dict[str, object]
-    raw_context: RetrievalResult
+    retrieval_mode: dict[str, object] | None
+    raw_context: RetrievalResult | None
     context: str
     answer: str
 
@@ -32,6 +37,15 @@ class GraphState(TypedDict, total = False):
 # ------------------
 # NODOS
 # ------------------
+def prepare_turn_node(state: GraphState):
+    result = prepare_turn(state['messages'])
+    return result
+
+def rewrite_query_node(state: GraphState):
+    rewritten_query = rewrite_query(state['messages'])
+    result = {'query': rewritten_query}
+    return result
+
 def bouncer_node(state: GraphState):
     response = bouncer(state['query'])
     decision = response.decision
@@ -191,6 +205,8 @@ def create_graph(
 
     graph = StateGraph(GraphState)
 
+    graph.add_node('PrepareTurn', prepare_turn_node)
+    graph.add_node('RewriteQuery', rewrite_query_node)
     graph.add_node('Bouncer', bouncer_node)
     graph.add_node('DeterministicAnalysis', deterministic_analysis_node_conf)
     graph.add_node('Reviewer', reviewer_node)
@@ -203,7 +219,9 @@ def create_graph(
     graph.add_node('GenerateContext', context_node)
     graph.add_node('GenerateAnswer', generate_answer_node)
 
-    graph.add_edge(START, 'Bouncer')
+    graph.add_edge(START, 'PrepareTurn')
+    graph.add_edge('PrepareTurn', 'RewriteQuery')
+    graph.add_edge('RewriteQuery', 'Bouncer')
     graph.add_conditional_edges(
         'Bouncer', 
         route_after_bouncer,
