@@ -320,11 +320,14 @@ pruebas aisladas que también verifican la convergencia posterior y las salidas
 anticipadas. El orden de trabajo actualizado es:
 
 1. ~~Hacer incremental la indexación vectorial de Chroma.~~
-2. Hacer incremental el parseo mediante SHA-256 del PDF y `parser_version`, y
-   definir la eliminación de registros obsoletos en informes revisados.
-3. Hacer incremental, si resulta necesario, la sincronización de SQLite; su
+2. Como mejora no urgente, hacer incremental el parseo mediante SHA-256 del PDF
+   y `parser_version`. Con 55 partes, reconstruir el JSONL completo tarda solo
+   unos segundos.
+3. Definir la eliminación segura de registros obsoletos en Chroma y SQLite para
+   informes eliminados o revisados.
+4. Hacer incremental, si resulta necesario, la sincronización de SQLite; su
    `upsert` completo actual no recalcula embeddings y sigue siendo barato.
-4. Medir los costes de carga, retrieval y llamadas a Ollama antes de aplicar
+5. Medir los costes de carga, retrieval y llamadas a Ollama antes de aplicar
    otras optimizaciones.
 
 La conversación multiturno ya está integrada y cubierta por pruebas. Después

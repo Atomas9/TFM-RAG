@@ -780,3 +780,8 @@ Esto completa la indexación incremental de Chroma, pero no convierte todavía
 en incremental toda la ingesta: el parser reconstruye el JSONL desde todos los
 PDF y `metadata_store.py` vuelve a ejecutar un `upsert` de todas las filas. La
 eliminación segura de IDs obsoletos también permanece pendiente.
+
+El parseo incremental queda registrado como mejora no urgente. La ejecución
+completa de los 55 partes actuales tarda aproximadamente 2–3 segundos, por lo
+que la complejidad adicional de mantener un manifiesto de parseo no aporta aún
+una mejora relevante frente a las tareas de robustez del RAG.

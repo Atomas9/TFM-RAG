@@ -105,7 +105,9 @@ La salida se reconstruye desde todos los PDF en cada ejecucion. Este enfoque es
 deliberado mientras el corpus sea pequeno y el esquema siga evolucionando. La
 indexacion vectorial posterior ya es incremental; queda pendiente aplicar una
 estrategia equivalente al parser para decidir mediante `source_sha256` y
-`parser_version` que documentos deben reprocesarse.
+`parser_version` que documentos deben reprocesarse. Es una optimizacion no
+urgente: con el corpus actual, el reprocesado completo tarda solo unos segundos
+y mantiene una implementacion sencilla.
 
 ## Indexacion vectorial implementada
 

@@ -1247,11 +1247,12 @@ completo con consultas reales.
 
 - Definir una política controlada ante JSON o propuestas inválidas del LLM.
 - Hacer incremental el parser si el coste de reprocesar todos los PDF deja de
-  ser aceptable.
+  ser aceptable. Se considera una mejora no urgente porque los 55 partes
+  actuales se procesan en aproximadamente 2–3 segundos.
 - Añadir evaluación de suficiencia del contexto y decidir el futuro modo
   `timeline`.
 
 ### Siguiente paso
 
-Definir la siguiente prioridad entre el parseo incremental, la recuperación
-controlada ante salidas LLM inválidas y la evaluación del contexto.
+Priorizar la recuperación controlada ante salidas LLM inválidas o la evaluación
+del contexto. El parseo incremental queda aplazado como optimización futura.
