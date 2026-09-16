@@ -1,183 +1,81 @@
-# Pruebas
+# Pruebas automatizadas
 
-Las pruebas previstas para el parser de PDF comprobaran:
-
-- los recuentos actuales de 9, 9, 10, 6, 5, 4, 3 y 2 incendios en los ocho PDF
-  de referencia, con 48 snapshots en total;
-- el numero de incendios extraidos de cada PDF de referencia;
-- la conservacion de comunidad y provincia entre incendios consecutivos;
-- la extraccion de fecha, estado, situacion operativa y pagina;
-- la extraccion de notas, fechas de inicio y medios asignados;
-- la exclusion de registros que no correspondan a Espana;
-- la ausencia del resumen estadistico dentro del ultimo chunk;
-- la unicidad y estabilidad de los 48 `snapshot_id`;
-- la agrupacion heuristica de ubicaciones repetidas mediante `incident_key`;
-- el caso de Villablino, cuya fecha de inicio no aparece en todos los partes;
-- que `incident_key` no se utiliza para eliminar snapshots;
-- que `parse_miteco_pdf()` devuelve el recuento esperado de cada parte;
-- que `parse_pdf_directory()` conserva los 48 snapshots y un orden
-  determinista;
-- que una carpeta vacia y un PDF inexistente generan `FileNotFoundError`;
-- que importar el modulo no ejecuta el pipeline ni escribe archivos;
-- que `validate_snapshots()` bloquea identificadores duplicados y contaminacion
-  con el resumen estadistico;
-- que `run_phase1()` genera 48 lineas JSONL validas y un `ParserReport`
-  coherente;
-- que fechas, tildes y modelos anidados sobreviven a la serializacion JSON;
-- la insercion y consulta de embeddings propios en ChromaDB;
-- que los IDs y documentos de Chroma coinciden con los del JSONL;
-- que BGE-M3 genera un vector normalizado de 1.024 dimensiones por snapshot;
-- que la conversion de metadatos elimina los valores `None` y conserva sus
-  tipos simples;
-- que una segunda ejecucion con los mismos snapshots no duplica registros;
-- la creacion e idempotencia de la base SQLite de metadatos;
-- los indices SQL para fechas, ubicaciones e incidentes;
-- el rechazo de JSON invalido y snapshots sin campos obligatorios;
-- los filtros exactos por pais, ubicacion, provincia, estado y fecha;
-- una consulta semantica y otra combinada con filtros.
-
-## Pruebas implementadas
-
-`test_parseo_y_chuncking.py` cubre los partes sin actuaciones:
-
-- un documento que declara explícitamente cero incendios produce cero bloques;
-- un documento sin bloques ni marcador de parte vacío sigue generando error;
-- el informe del parser conserva con recuento cero los PDF procesados sin
-  snapshots.
-
-`test_query_filters.py` cubre el analizador sin depender del corpus local:
-
-- inclusiones y exclusiones de provincias;
-- `no de Leon sino de Palencia`;
-- listas con `y` y `o` traducidas a `$in` o `$nin`;
-- prioridad de `Castilla y Leon` frente a la provincia de Leon;
-- reconocimiento de provincias validas ausentes del corpus, como Huelva;
-- localizaciones dinamicas con articulo invertido;
-- desambiguacion de provincia y comunidad de Madrid;
-- paises, estados y situaciones operativas;
-- fechas exactas, intervalos y comparaciones estrictas;
-- consultas por mes y ano;
-- presente implicito o explicito frente a formulaciones historicas;
-- seleccion automatica del ultimo parte para consultas actuales;
-- contradicciones y consultas sin filtros;
-- la interfaz unificada `metadata_query(question, catalog)`.
-
-`test_retrieval_mode.py` comprueba la selección determinista de:
-
-- búsqueda híbrida;
-- mínimos y máximos con su operación;
-- recuentos de incendios, snapshots e informes;
-- consultas de evolución temporal;
-- rechazo de preguntas vacías.
-
-`test_metadata_store.py` y `test_metadata_queries.py` validan:
-
-- creación, índices e idempotencia de la base SQLite;
-- traducción parametrizada de filtros simples y grupos `AND/OR` anidados;
-- rechazo de campos, operadores y valores no permitidos;
-- mínimos y máximos globales o filtrados;
-- recuperación de todos los IDs empatados en una fecha extrema;
-- recuentos distintos de `incident_key`, filas y `source_sha256`;
-- conservación de un recuento igual a cero.
-
-`test_retrieval_chroma.py` usa dobles del modelo y de Chroma para probar:
-
-- el contrato plano común de `RetrievalResult`;
-- la normalización del resultado híbrido;
-- que `retrieve_min_max()` filtra antes de calcular el extremo;
-- la recuperación de documentos exactos por ID;
-- que `retrieve_count()` no necesita documentos ni embeddings.
-
-`test_embeddings_chroma.py` comprueba sin cargar BGE-M3:
-
-- estabilidad y cambio de la firma de indexacion;
-- lectura de firmas ya almacenadas en Chroma;
-- seleccion exclusiva de snapshots nuevos o modificados;
-- migracion de registros antiguos que todavia no tienen firma;
-- finalizacion sin cargar el modelo cuando el indice ya esta actualizado.
-
-`test_rag_graph.py` valida el routing de LangGraph sin cargar Ollama, BGE-M3,
-Chroma ni SQLite reales:
-
-- selección integrada de las ramas `hybrid`, `min_max` y `count`;
-- llegada de las tres ramas a los nodos comunes de contexto y respuesta;
-- conservación de `final_where` hasta el retrieval correspondiente;
-- terminación anticipada de `NO GO` y `clarify`;
-- paso de `replace` por generación y resolución del filtro;
-- traducción de los tres modos a sus aristas condicionales;
-- reconstrucción del plan serializado dentro de los nodos exactos;
-- propagación de `operation` y `count_target` a sus retrievals;
-- acumulación ordenada de mensajes durante dos turnos con el mismo
-  `thread_id`;
-- incorporación al historial de respuestas normales, `NO GO` y `clarify`.
-
-`test_prepare_turn.py` y `test_rewrite_query.py` comprueban:
-
-- selección del último mensaje del usuario;
-- limpieza del estado técnico sin duplicar el historial;
-- rechazo de conversaciones sin una pregunta válida;
-- ausencia de llamada a Ollama durante el primer turno;
-- envío limitado del historial en una pregunta de seguimiento;
-- extracción de la consulta reescrita y rechazo de respuestas vacías.
-
-`test_main_langgraph.py` ejecuta el bucle con recursos simulados y verifica:
-
-- carga única de modelo, colección, catálogo y conexión;
-- envío de cada pregunta mediante `messages`;
-- reutilización del mismo `thread_id`;
-- rechazo de entradas vacías y salida mediante `salir`;
-- cierre de Chroma y SQLite al finalizar.
-
-`test_retrieval_chroma_solution.py` usa dobles del modelo y de la coleccion
-para probar la implementación de referencia:
-
-- el embedding normalizado enviado a Chroma;
-- la presencia opcional de `where`;
-- la devolucion auditable de `ParsedQuery` y del filtro final;
-- el bloqueo de una consulta contradictoria antes de buscar.
-
-`test_augmented_generator.py` usa un cliente Ollama simulado para comprobar:
-
-- la numeracion y union de chunks;
-- el contexto vacio;
-- la incorporación de agregados exactos al contexto;
-- los estados generales `WITH_DATA` y `NO_DATA`;
-- que un recuento cero se conserva como dato recuperado;
-- que pregunta, contexto y modelo se envian correctamente.
-
-`test_download_miteco_report.py` prueba sin acceder a Internet:
-
-- descubrimiento del enlace definitivo y resolución de URL relativas;
-- error explícito cuando el enlace no existe;
-- extracción de la fecha española desde un PDF real en memoria;
-- rechazo de firmas y tipos MIME inválidos;
-- escritura del PDF y del manifiesto;
-- idempotencia cuando se repite el mismo SHA-256;
-- sustitución y trazabilidad de revisiones del mismo día;
-- rechazo de un parte cuya fecha no es la esperada;
-- registro de nombres históricos sin duplicar el PDF;
-- revisión posterior de un archivo histórico ya registrado.
-
-## Pruebas pendientes del revisor LLM
-
-Se creará `test_revisor_query_filters.py` con Ollama y Chroma simulados para
-comprobar:
-
-- las cuatro acciones `keep`, `extend`, `replace` y `clarify`;
-- la validación de una respuesta JSON inválida;
-- el rechazo de una pregunta vacía sin llamar al modelo;
-- la estructura del análisis determinista enviado en el prompt.
-
-Estas pruebas comprobarán el contrato Python sin red. La calidad del prompt se
-evaluará por separado mediante un conjunto pequeño de llamadas reales y
-resultados esperados.
-
-La suite actual contiene 141 pruebas y se ejecuta con:
+La suite se ejecuta desde la raíz del repositorio:
 
 ```bash
 python -m pytest -q
 ```
 
-Las pruebas del parser de PDF y una evaluacion de relevancia con preguntas y
-resultados esperados siguen pendientes. Estas ultimas deberan separar calidad
-semantica, exactitud de filtros y comportamiento cuando no existe respuesta.
+El estado validado el 16 de septiembre de 2026 contiene **137 pruebas**. La mayoría utiliza dobles para no descargar BGE-M3, llamar a Ollama Cloud ni depender de las bases locales.
+
+## Cobertura actual
+
+### Parser y snapshots
+
+`test_parseo_y_chuncking.py` verifica:
+
+- separación de incendios y conservación del contexto geográfico;
+- extracción de fechas, estados, situación operativa, notas y medios;
+- creación y estabilidad de `snapshot_id` e `incident_key`;
+- serialización de modelos Pydantic;
+- validaciones contra duplicados y contaminación del resumen estadístico;
+- orden determinista y errores ante rutas inválidas;
+- generación del JSONL y del informe del parser;
+- tratamiento de partes que declaran cero actuaciones.
+
+### Descarga automática
+
+`test_download_miteco_report.py` cubre sin acceder a Internet:
+
+- descubrimiento de enlaces y resolución de URL relativas;
+- validación de firma, tipo MIME y fecha del PDF;
+- escritura del documento y del manifiesto;
+- idempotencia por SHA-256;
+- revisiones y nombres históricos.
+
+### Filtros y planificación
+
+`test_query_filters.py` prueba inclusiones, exclusiones, grupos lógicos, geografía, estados, fechas, periodos, presente frente a pasado, contradicciones y la interfaz unificada del analizador.
+
+`test_retrieval_mode.py` comprueba la selección de búsqueda híbrida, mínimo, máximo, recuentos y detección de consultas temporales.
+
+### Persistencia e indexación
+
+`test_embeddings_chroma.py` valida la firma de indexación, la selección de snapshots nuevos o modificados, la migración de registros antiguos y la salida sin cargar el modelo cuando no existen cambios.
+
+`test_metadata_store.py` y `test_metadata_queries.py` verifican:
+
+- creación e idempotencia de SQLite;
+- índices para fechas, ubicaciones e incidentes;
+- traducción parametrizada de filtros simples y grupos anidados;
+- rechazo de campos, operadores y valores no permitidos;
+- extremos globales o filtrados y todos sus empates;
+- recuentos exactos, incluido cero.
+
+### Recuperación y generación
+
+`test_retrieval_chroma.py` prueba el contrato común `RetrievalResult`, la salida plana de Chroma, el cálculo del extremo después de filtrar y los recuentos sin embeddings.
+
+`test_augmented_generator.py` cubre la construcción del contexto, documentos vacíos, agregados exactos y la distinción entre `WITH_DATA` y `NO_DATA` mediante un cliente Ollama simulado.
+
+### Conversación y LangGraph
+
+`test_prepare_turn.py` y `test_rewrite_query.py` comprueban la preparación del turno, la limpieza del estado técnico, la conservación del historial y la reescritura de preguntas dependientes.
+
+`test_rag_graph.py` recorre con dependencias simuladas:
+
+- ramas `hybrid`, `min_max` y `count`;
+- propagación de filtros y parámetros de cada ruta;
+- terminación anticipada para `NO GO` y `clarify`;
+- generación y resolución de filtros LLM;
+- convergencia en contexto y respuesta;
+- acumulación ordenada de mensajes durante varios turnos.
+
+`test_main_langgraph.py` valida el bucle de terminal, la carga única de recursos, la reutilización del `thread_id`, las entradas vacías y el cierre de Chroma y SQLite.
+
+## Cobertura pendiente
+
+- Contratos aislados de `bouncer.py`, `revisor_query_filters.py` y `generate_filter_LLM.py`, incluidas respuestas JSON inválidas.
+- Rama de recuperación `timeline`, cuando se implemente.
+- Evaluación de calidad con un conjunto estable de preguntas, resultados esperados y métricas separadas para filtros, recuperación y respuesta.
+- Pruebas de integración opcionales contra Ollama Cloud y el corpus local completo.

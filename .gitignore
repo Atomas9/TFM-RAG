@@ -37,6 +37,14 @@ env/
 *.tmp
 *.swp
 *.swo
+/tmp/
+
+# Material local de apoyo, aprendizaje y presentacion
+/extras/
+/notebooks/
+/docs/apuntes/
+/docs/presentacion/
+/docs/revisiones/
 
 # Datos descargados, resultados e indices regenerables
 data/raw/**

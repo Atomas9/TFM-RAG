@@ -4,6 +4,11 @@ Registro cronologico del desarrollo del RAG de incendios forestales de MITECO.
 Cada jornada debe anadir una entrada con los cambios realizados, las decisiones
 adoptadas, las comprobaciones ejecutadas y los siguientes pasos.
 
+> Este documento conserva el historial tal como se registró en cada fecha. Por
+> ello, algunas entradas mencionan cifras, rutas o prototipos que fueron
+> sustituidos posteriormente. El `README.md` y `docs/ARQUITECTURA.md` describen
+> el estado vigente del proyecto.
+
 ## Plantilla de entrada
 
 ```markdown
@@ -1256,3 +1261,48 @@ completo con consultas reales.
 
 Priorizar la recuperación controlada ante salidas LLM inválidas o la evaluación
 del contexto. El parseo incremental queda aplazado como optimización futura.
+
+## 2026-09-16 — Preparación del repositorio público
+
+### Objetivo
+
+Reducir el ruido del repositorio que se compartirá con la memoria del TFM y
+dejar la documentación alineada con el código vigente.
+
+### Trabajo realizado
+
+- Se excluyeron de Git los apuntes, notebooks, revisiones internas, recursos de
+  presentación y el directorio histórico superior `extras/`. Los archivos se
+  conservan localmente mediante reglas de `.gitignore`.
+- Se eliminaron del paquete `src/miteco_rag` los prototipos sustituidos y la
+  prueba que dependía de una solución antigua de retrieval.
+- Se conservaron los scripts de inspección de Chroma y checkpoints porque
+  siguen siendo útiles y compatibles con la arquitectura actual.
+- Se reescribieron el README y los documentos de arquitectura para describir
+  la ingesta, los índices complementarios, la conversación multiturno y las
+  rutas `hybrid`, `min_max` y `count`.
+- Se actualizó la guía de pruebas y se eliminaron enlaces a rutas retiradas.
+- Se retiraron de `requirements.txt` las dependencias que solo utilizaban los
+  prototipos y notebooks excluidos: pypdf, RapidFuzz, ipykernel y nbformat.
+- Se añadió una advertencia al comienzo de esta bitácora para distinguir el
+  historial de desarrollo de la documentación vigente.
+
+### Validación
+
+- El corpus local contiene 58 PDF y 324 snapshots: 318 de España y 6 registros
+  extranjeros, entre el 5 de julio y el 7 de septiembre de 2026.
+- La suite vigente contiene 137 pruebas tras retirar cuatro pruebas ligadas al
+  prototipo obsoleto.
+
+### Decisiones
+
+- Los PDF y el manifiesto permanecen versionados porque GitHub Actions los
+  incorpora automáticamente y constituyen las fuentes del proyecto.
+- Los artefactos regenerables y los materiales auxiliares no forman parte del
+  repositorio público.
+- La ruta `timeline` se documenta como reconocida pero aún no implementada.
+
+### Siguiente paso
+
+Revisar los cambios preparados, crear el commit de limpieza y, después,
+continuar con robustez de salidas LLM o evaluación sistemática del RAG.

@@ -2,14 +2,9 @@
 httpx>=0.27,<1.0
 beautifulsoup4>=4.12,<5.0
 
-# Extraccion y parseo de PDF
-# PyMuPDF sera el lector principal; pypdf mantiene compatible el prototipo actual.
+# Extraccion, parseo y validacion de PDF
 pymupdf>=1.24,<2.0
-pypdf>=5.0,<7.0
 pydantic>=2.7,<3.0
-
-# Normalizacion y resolucion aproximada de ubicaciones
-rapidfuzz>=3.9,<4.0
 
 # Embeddings locales y calculo vectorial
 # Versiones compatibles con macOS Intel x86_64. PyTorch dejo de publicar
@@ -32,7 +27,3 @@ langgraph-checkpoint-sqlite>=3.1,<4.0
 
 # Pruebas del parser y del pipeline de recuperacion
 pytest>=8.0,<10.0
-
-# Ejecucion de notebooks en VS Code/Jupyter
-ipykernel>=6.29,<8.0
-nbformat>=5.10,<6.0

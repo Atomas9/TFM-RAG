@@ -1,279 +1,201 @@
-# Arquitectura del sistema
+# Arquitectura del RAG de incendios de MITECO
 
-## Objetivo
+## 1. Objetivo y alcance
 
-Construir un RAG trazable sobre partes diarios de MITECO que permita recuperar
-informacion por similitud semantica, por metadatos o combinando ambos metodos.
+El sistema permite consultar en lenguaje natural los partes diarios de intervenciones en incendios forestales publicados por MITECO. Combina recuperación semántica, filtros estructurados y operaciones exactas sobre metadatos.
 
-## Flujo de ingesta
+El corpus representa actuaciones recogidas por MITECO, no todos los incendios ocurridos en España. Las respuestas deben interpretarse siempre dentro de los documentos disponibles.
+
+## 2. Vista general
 
 ```text
 MITECO
-  -> GitHub Actions, dos intentos diarios
-  -> descubrimiento y validacion del parte definitivo
-  -> fecha interna, hash SHA-256 y manifiesto JSONL
-  -> almacenamiento versionado en data/raw/miteco
-  -> extraccion por paginas con PyMuPDF
-  -> parser especifico basado en una maquina de estados
-  -> validacion de FireSnapshot con Pydantic
-  -> validacion agregada y ParserReport
-  -> exportacion JSONL y JSON en data/processed
-  -> embeddings BAAI/bge-m3
-  -> ChromaDB en data/chroma
-```
+  -> descarga y validación
+  -> PDF versionados
+  -> parser
+  -> FireSnapshot JSONL (fuente procesada)
+       ├─> Sentence Transformers -> ChromaDB
+       └─> metadatos ------------> SQLite
 
-## Flujo de consulta
-
-```text
-pregunta
-  -> normalizacion y deteccion de filtros
-  -> consulta semantica, estructurada o combinada en ChromaDB
-  -> seleccion de top-k snapshots
-  -> construccion de contexto con fuentes
+Pregunta y conversación
+  -> preparación y reescritura contextual
+  -> control temático
+  -> filtros deterministas
+  -> revisión/corrección opcional con LLM
+  -> selección de recuperación
+       ├─> híbrida: ChromaDB
+       ├─> mínimo/máximo: SQLite + ChromaDB
+       └─> recuento: SQLite
+  -> contexto
   -> respuesta con Ollama Cloud
 ```
 
-## Componentes
+## 3. Ingesta documental
 
-| Responsabilidad | Tecnologia |
-| --- | --- |
-| Descarga programada | GitHub Actions, httpx y Beautiful Soup |
-| Lectura de PDF | PyMuPDF |
-| Esquemas y validacion | Pydantic |
-| Normalizacion aproximada | unicodedata y RapidFuzz |
-| Embeddings | Sentence Transformers y BAAI/bge-m3 |
-| Base vectorial | ChromaDB |
-| Generacion | Ollama y gemma4:31b-cloud |
-| Pruebas | pytest |
+### 3.1 Descarga
 
-La ingesta automática es una etapa independiente. Dos ejecuciones diarias
-descargan el enlace estable de MITECO, pero la fecha se obtiene del contenido
-del PDF. Solo se acepta el parte del día anterior en `Europe/Madrid`. El hash
-evita duplicados y `manifest.jsonl` conserva procedencia y revisiones. En esta
-fase el workflow no relanza el parser ni actualiza Chroma.
+`download_miteco_report.py` localiza el parte definitivo, valida que el archivo sea un PDF coherente con la fecha solicitada, calcula su SHA-256 y actualiza el manifiesto. El workflow de GitHub Actions ejecuta este proceso dos veces al día y solo crea un commit cuando existe un documento nuevo o una revisión real.
 
-## Unidad documental
+Los PDF y el manifiesto se versionan en `data/raw/miteco/`. El resto de artefactos se regenera localmente y no se almacena en Git.
 
-La unidad principal sera un snapshot: el estado de un incendio en una fecha de
-parte determinada. Un mismo incendio puede generar varios snapshots a lo largo
-de varios dias y no deben eliminarse como duplicados.
+### 3.2 Parseo y chunking
 
-Se distinguen dos niveles de identidad:
+`parseo_y_chuncking.py` utiliza PyMuPDF para leer el texto manteniendo página y orden. Después:
 
-- `snapshot_id` es unico para cada bloque dentro de un PDF y se deriva del hash
-  del documento, el ordinal y la localizacion normalizada;
-- `incident_key` es una agrupacion heuristica basada en pais, comunidad,
-  provincia, localizacion y fecha de inicio cuando esta disponible.
+1. limpia y normaliza las líneas;
+2. conserva el contexto geográfico del documento;
+3. identifica bloques iniciados por `Localización:`;
+4. extrae país, comunidad, provincia, localidad, estado, situación operativa, medios, notas y fechas;
+5. construye y valida un `FireSnapshot` con Pydantic;
+6. genera un `chunk_text` autosuficiente para recuperación y respuesta.
 
-Cuando falta la fecha de inicio, dos partes de la misma ubicacion comparten
-`incident_key`. Esto permite recuperar una posible serie temporal, pero tambien
-puede unir incendios diferentes ocurridos en el mismo lugar. En sentido
-contrario, si la fecha aparece en un parte y falta en otro, un mismo incendio
-puede quedar dividido. La identidad definitiva requerira una fase posterior de
-resolucion temporal que considere continuidad entre partes, estado y fechas
-explicitas. Por tanto, `incident_key` no se usara para eliminar snapshots.
+Cada snapshot corresponde a un incendio en una fecha de parte. `snapshot_id` identifica esa observación concreta. `incident_key` intenta agrupar observaciones del mismo incendio mediante geografía, localización y fecha de inicio; es una heurística, no una identidad oficial.
 
-El parser mantendra como estado, al menos:
+El parser genera:
 
-- comunidad autonoma actual;
-- provincia actual;
-- numero de pagina;
-- incendio actualmente abierto.
+- `data/processed/fire_snapshots.jsonl`: un snapshot por línea;
+- `data/processed/parser_report.json`: archivos procesados, recuentos, advertencias y errores.
 
-La orquestacion se divide en dos niveles:
+Actualmente vuelve a procesar todos los PDF. La indexación incremental del parser es una mejora futura.
 
-- `parse_miteco_pdf(pdf_path, source_url=None)` ejecuta extraccion, metadatos,
-  separacion de bloques y construccion de snapshots para un unico documento;
-- `parse_pdf_directory(input_dir)` ordena los PDF por ruta, procesa cada uno y
-  concatena sus snapshots sin deduplicarlos.
+## 4. Persistencia e indexación
 
-El orden determinista permite repetir una ejecucion y comparar su salida. La
-deduplicacion por `incident_key` queda expresamente fuera de esta etapa porque
-un mismo incendio puede tener un snapshot diferente cada dia.
+### 4.1 ChromaDB
 
-`validate_snapshots()` comprueba identificadores duplicados, rangos de paginas,
-contaminacion con el resumen estadistico y ausencias relevantes. Los errores
-bloquean la exportacion; las advertencias se conservan en el informe.
+`embeddings_chroma.py` transforma cada `chunk_text` con `BAAI/bge-m3`, normaliza el embedding y almacena en ChromaDB:
 
-`run_phase1()` genera:
+- `snapshot_id` como identificador;
+- el texto enriquecido como documento;
+- el vector semántico;
+- los metadatos usados por los filtros;
+- una firma de indexación.
 
-- `fire_snapshots.jsonl`: un objeto `FireSnapshot` por linea;
-- `parser_report.json`: version del parser, instante UTC, documentos, recuentos,
-  advertencias y errores de la ejecucion.
+La firma combina el contenido relevante y la configuración del modelo. De este modo, el script solo carga BGE-M3 y recalcula los registros nuevos o modificados. La escritura utiliza `upsert`. Los identificadores obsoletos se detectan, pero todavía no se eliminan automáticamente.
 
-La salida se reconstruye desde todos los PDF en cada ejecucion. Este enfoque es
-deliberado mientras el corpus sea pequeno y el esquema siga evolucionando. La
-indexacion vectorial posterior ya es incremental; queda pendiente aplicar una
-estrategia equivalente al parser para decidir mediante `source_sha256` y
-`parser_version` que documentos deben reprocesarse. Es una optimizacion no
-urgente: con el corpus actual, el reprocesado completo tarda solo unos segundos
-y mantiene una implementacion sencilla.
+### 4.2 SQLite de metadatos
 
-## Indexacion vectorial implementada
+`metadata_store.py` mantiene una fila por snapshot con los campos necesarios para filtrar, agregar y enlazar el resultado con Chroma mediante `snapshot_id`:
 
-`src/miteco_rag/embeddings_chroma.py` realiza el primer indice denso del
-proyecto:
+```text
+snapshot_id, incident_key, report_date_number, country,
+autonomous_community_normalized, province_normalized,
+location_normalized, status, operational_status,
+source_file, source_sha256
+```
 
-1. lee `data/processed/fire_snapshots.jsonl` linea a linea;
-2. reconstruye y valida cada linea como `FireSnapshot` con Pydantic;
-3. usa `chunk_text` como unidad de embedding y como documento recuperable;
-4. compara una firma del snapshot y de la configuracion con los metadatos ya
-   almacenados;
-5. si existen registros nuevos o modificados, genera solo sus vectores con
-   `BAAI/bge-m3`, CPU, lotes de ocho y normalizacion;
-6. convierte los metadatos a tipos planos admitidos por Chroma y omite los
-   valores `None`;
-7. abre una base persistente en `data/chroma`;
-8. inserta o actualiza la coleccion `MITECO_fire_snapshots` mediante
-   `snapshot_id`.
+SQLite evita cargar embeddings o recorrer todos los documentos para operaciones exactas como `MIN`, `MAX`, `COUNT` y, en el futuro, cronologías. El JSONL sigue siendo la fuente de verdad; esta base es un índice regenerable.
 
-El indice actual incluye los 309 snapshots del JSONL: 303 de Espana y 6 de
-otros paises. Esta inclusion es deliberada; `country` permite aplicar un filtro
-posterior cuando una consulta deba limitarse a Espana.
+En la validación del 16 de septiembre de 2026, el JSONL, ChromaDB y SQLite contenían 324 snapshots.
 
-Chroma se configura con `embedding_function=None` porque los vectores se
-calculan fuera de la base de datos. Las consultas semanticas deberan usar el
-mismo modelo y la misma normalizacion. Los vectores comprobados tienen 1.024
-dimensiones y norma unitaria.
+## 5. Interpretación de la consulta
 
-La escritura usa `get_or_create_collection()` y `upsert()`. Una firma SHA-256
-incluye el snapshot, el modelo, la normalizacion y `INDEX_VERSION`. Si todas las
-firmas coinciden, el proceso termina sin cargar BGE-M3. Si un ID desaparece del
-JSONL se informa como obsoleto, pero todavia no se borra de Chroma.
+### 5.1 Conversación
 
-## Metadatos minimos
+`prepare_turn.py` valida el historial del turno. `rewrite_query.py` utiliza la conversación para convertir preguntas dependientes —por ejemplo, «¿y cuáles estaban activos?»— en una consulta autónoma. Los mensajes se acumulan en `GraphState` y LangGraph los conserva mediante `SqliteSaver` y un `thread_id`.
 
-- `snapshot_id`
-- `incident_key`
-- `document_id`
-- `country`
-- `autonomous_community`
-- `autonomous_community_normalized`
-- `province`
-- `province_normalized`
-- `location`
-- `location_normalized`
-- `status`
-- `operational_status`
-- `report_date`
-- `report_date_number`
-- `last_update`
-- `page_start`
-- `page_end`
-- `source_file`
-- `source_url`
-- `source_sha256`
-- `parser_version`
-- `raw_text`
-- `chunk_text`
+### 5.2 Control temático
 
-## Modos de recuperacion
+`bouncer.py` decide si la pregunta pertenece al dominio de incendios. Una consulta ajena termina el flujo sin recuperar documentos. Las preguntas de seguimiento se evalúan después de la reescritura contextual.
 
-1. Metadatos: `collection.get(where=...)`.
-2. Semantica: `collection.query(query_embeddings=...)`.
-3. Combinada: embedding de la pregunta junto con `where`.
+### 5.3 Filtros
 
-Las ubicaciones se normalizan antes de almacenarlas y consultarlas. Las
-variantes o errores tipograficos deben resolverse en la aplicacion antes de
-enviar un filtro exacto a Chroma.
+`query_filters.py` reconoce de forma determinista país, comunidad autónoma, provincia, localización, estado, situación operativa y fechas. También representa inclusiones, exclusiones y uniones o intersecciones en el formato `where` de ChromaDB.
 
-## Retrieval implementado
+El resultado determinista contiene tanto los filtros interpretados como posibles ambigüedades y el `deterministic_where`. `revisor_query_filters.py` pide a un LLM una de cuatro decisiones:
 
-La consulta se divide en dos modulos:
+- `keep`: el filtro ya es coherente y suficiente;
+- `extend`: debe completarse;
+- `replace`: debe sustituirse;
+- `clarify`: hace falta preguntar al usuario.
 
-- `query_filters.py` interpreta la pregunta sin abrir Chroma ni cargar el
-  modelo;
-- `retrieval_chroma.py` conserva la implementacion en desarrollo del alumno;
-- `extras/retrieval_chroma_solution.py` conserva como referencia cómo generar
-  el embedding y ejecutar `collection.query()` con el `where` construido.
+En los casos `extend` y `replace`, `generate_filter_LLM.py` devuelve una propuesta estructurada, la valida contra el catálogo permitido y construye el `final_where`. Los modelos Pydantic se serializan como diccionarios antes de guardarlos en el estado del grafo para facilitar la persistencia de checkpoints.
 
-El analizador produce primero un `ParsedQuery` que conserva:
+## 6. Estrategias de recuperación
 
-- pregunta original y consulta semantica;
-- valores incluidos y excluidos por campo;
-- intervalo de fechas del parte;
-- contradicciones o ambiguedades detectadas.
+`retrieval_mode.py` elige el modo de forma determinista.
 
-`MetadataCatalog` conserva ademas las fechas de parte disponibles, los anos y
-`latest_report_date`. No se duplican mes y ano en Chroma: las consultas por
-mes o ano se traducen a limites sobre `report_date_number`.
+### 6.1 Recuperación híbrida
 
-`build_chroma_where()` realiza despues una traduccion independiente a `$and`,
-`$in`, `$nin`, `$ne`, `$gte` y `$lte`. Esta separacion permite probar si un
-error procede de la interpretacion linguistica o de la condicion enviada a la
-base de datos.
+Para preguntas descriptivas se aplica primero `final_where` y ChromaDB devuelve hasta diez documentos que cumplen el filtro, ordenados por proximidad del embedding de la pregunta. La salida común es un `RetrievalResult` plano con identificadores, documentos, metadatos, distancias y, si procede, un agregado.
 
-Para el uso habitual, `metadata_query(question, catalog)` encapsula ambos
-pasos, bloquea las ambiguedades y devuelve directamente el diccionario `where`
-o `None` cuando no reconoce filtros.
+### 6.2 Mínimo o máximo
 
-Los campos soportados son:
+Para preguntas como «¿cuál es el último parte de León?»:
 
-- `country`;
-- `autonomous_community_normalized`;
-- `province_normalized`;
-- `location_normalized`;
-- `status`;
-- `operational_status`;
-- `report_date_number`.
+1. `metadata_queries.py` traduce a SQL el mismo filtro de Chroma;
+2. SQLite calcula la fecha mínima o máxima dentro del conjunto ya filtrado;
+3. obtiene todos los `snapshot_id` de esa fecha;
+4. ChromaDB recupera sus documentos por identificador.
 
-Los catalogos completos de comunidades y provincias permiten reconocer una
-provincia aunque no tenga incendios en el corpus actual. En ese caso Chroma
-devuelve cero registros. Las localizaciones son dinamicas y se construyen con
-los metadatos existentes, porque cada parte puede introducir nombres nuevos.
+Así se evita el error de calcular primero la fecha global y comprobar después si contiene resultados de León.
 
-El orden de prioridad evita interpretar `Leon` dentro de `Castilla y Leon` y
-resuelve expresiones como `no de Leon sino de Palencia`. Las contradicciones no
-se ejecutan: se devuelve un error explicito para solicitar una aclaracion.
+### 6.3 Recuentos
 
-La interpretacion temporal distingue tres casos:
+SQLite calcula recuentos exactos de:
 
-- una fecha, mes o ano explicito se convierte en fecha exacta o intervalo;
-- `activo` y expresiones presentes como `hay`, `existen`, `actualmente`,
-  `ahora`, `a dia de hoy` o `ultimo parte` usan el ultimo parte disponible;
-- formas historicas como `estuvieron activos` no reciben automaticamente la
-  fecha maxima.
+- incendios únicos, mediante `incident_key`;
+- snapshots;
+- partes o informes distintos.
 
-El ultimo parte es la fecha maxima del corpus, no informacion en tiempo real.
-Las respuestas posteriores deberan comunicar siempre la fecha de referencia.
+Esta ruta no carga el modelo de embeddings ni documentos completos. Un recuento de cero sigue siendo un resultado válido, no un fallo de recuperación.
 
-La funcion de bajo nivel `retrieve()` admite un `where` manual. La funcion
-`retrieve_with_filters()` construye el catalogo, interpreta la pregunta,
-comprueba ambiguedades y devuelve resultados, interpretacion y filtro final.
+### 6.4 Cronologías
 
-Todavia no existe un planificador que elija entre `get()` y `query()`: la ruta
-automatica actual siempre hace ranking vectorial dentro de los registros que
-cumplen el filtro. Tampoco se ha incorporado busqueda lexica.
+El clasificador reconoce preguntas de evolución temporal, pero la rama `timeline` todavía no está conectada en el grafo. Debe considerarse trabajo pendiente.
 
-El primer generador aumentado ya formatea los chunks y responde con Ollama
-Cloud. Aun no existe un evaluador de suficiencia posterior al retrieval ni un
-planificador de recuperación.
+## 7. Orquestación con LangGraph
 
-El revisor LLM de filtros ya existe como función independiente. Devuelve un
-`FilterReview` estructurado que separa coherencia y suficiencia y decide entre
-`keep`, `extend`, `replace` y `clarify`. Todavía faltan sus pruebas
-automatizadas con dobles, el generador de intención para corregir filtros y el
-clasificador de dominio.
+El flujo operativo de `rag_graph.py` es:
 
-La siguiente iteracion completara estos componentes antes de orquestarlos con
-LangGraph. El generador LLM devolverá condiciones y grupos lógicos validados,
-no un `where` libre.
+```text
+START
+  -> PrepareTurn
+  -> RewriteQuery
+  -> Bouncer
+       ├─ NO GO -> END
+       └─ GO -> DeterministicAnalysis
+                  -> Reviewer
+                       ├─ clarify -> END
+                       ├─ keep -> RetrievalMode
+                       └─ extend/replace
+                            -> GenerateFilter
+                            -> ResolveWhere
+                            -> RetrievalMode
+                                 ├─ hybrid -> Retrieve
+                                 ├─ min_max -> MinMaxRetrieve
+                                 └─ count -> CountRetrieve
+                                      -> GenerateContext
+                                      -> GenerateAnswer
+                                      -> END
+```
 
-Un nodo determinista reconciliara ambas interpretaciones campo por campo,
-conservara la procedencia de cada filtro y construira el `where`. Otro nodo
-elegira entre ranking semantico, retrieval hibrido, recuperación exhaustiva,
-recuento o linea temporal.
+Los recursos costosos se cargan una vez en `main_langgraph.py` y se inyectan en los nodos con `functools.partial`: modelo de embeddings, colección Chroma, catálogo de metadatos y conexión SQLite. El cliente de Chroma y la conexión SQLite se cierran al finalizar.
 
-Tras consultar Chroma se distinguira entre contexto suficiente, cero
-coincidencias exactas, mala similitud y cobertura incompleta. Solo los dos
-ultimos casos podran activar un segundo y ultimo retrieval.
+`GraphState` conserva consulta original, consulta reescrita, decisión temática, análisis, filtro determinista, revisión, propuesta, filtro final, modo de recuperación, resultado bruto, contexto, respuesta y mensajes. Los checkpoints permiten inspeccionar la traza y mantener conversación multiturno.
 
-El diseño completo, los grafos de ramas, el estado y los nodos previstos se
-describen en [ARQUITECTURA_LANGGRAPH.md](ARQUITECTURA_LANGGRAPH.md).
+## 8. Generación de la respuesta
 
-## Limites iniciales
+`augmented_generator.py` transforma cualquier `RetrievalResult` en un contexto textual común. El generador recibe la pregunta, ese contexto y el filtro aplicado. El prompt exige:
 
-- Corpus centrado en Espana y en documentos de MITECO.
-- Ejecucion local del parser, embeddings e indice.
-- Generacion remota opcional mediante Ollama Cloud.
-- Sin LangChain ni LlamaIndex durante la primera implementacion.
+- responder únicamente con la evidencia recuperada;
+- distinguir un resultado vacío de una ausencia absoluta de incendios;
+- limitar las afirmaciones al corpus disponible;
+- utilizar agregados exactos cuando la ruta es `count` o `min_max`.
+
+La implementación usa directamente el cliente de Ollama y `gemma4:31b-cloud`.
+
+## 9. Calidad, límites y evolución
+
+La batería actual contiene 137 pruebas y usa dobles para evitar depender de Ollama Cloud, BGE-M3 o una base real en la mayoría de los casos.
+
+Limitaciones principales:
+
+- cobertura condicionada por los partes de MITECO;
+- identidad de incendio heurística cuando falta la fecha inicial;
+- parser todavía no incremental;
+- ruta temporal pendiente;
+- falta una evaluación sistemática de calidad de recuperación y respuesta;
+- falta una política común de reintentos ante JSON inválido del LLM;
+- eliminación de registros obsoletos de Chroma pendiente.
+
+El diseño detallado de los nodos y de sus decisiones se conserva en [ARQUITECTURA_LANGGRAPH.md](ARQUITECTURA_LANGGRAPH.md).

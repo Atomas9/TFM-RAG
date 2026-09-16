@@ -47,17 +47,18 @@ punto de entrada mantiene además conversaciones de varios turnos.
 ## 2. Preparación del repositorio y del entorno
 
 El proyecto se reorganizó para separar el código nuevo del material anterior.
-Los documentos y programas utilizados como referencia se conservaron en
-`extras`, mientras que la implementación principal se situó en
-`src/miteco_rag`.
+La implementación principal se situó en `src/miteco_rag`. Los documentos y
+programas utilizados como referencia se conservaron durante el desarrollo y,
+antes de publicar el repositorio, se excluyeron de Git como material local.
 
 Se creó el entorno Conda `RAG-TFM` con Python 3.11. Las versiones de NumPy,
 PyTorch y Transformers tuvieron que ajustarse para mantener compatibilidad con
 el Mac Intel utilizado durante el desarrollo.
 
-Los PDF originales, los JSONL procesados y el índice de Chroma no se incluyen
-en Git. Son datos locales y regenerables. El repositorio solo conserva el
-código, las pruebas y la documentación necesarios para reconstruirlos.
+Los PDF originales y su manifiesto se incluyen en Git porque el workflow de
+descarga los incorpora automáticamente al corpus. El JSONL procesado, Chroma,
+SQLite y los checkpoints no se versionan porque son artefactos locales
+regenerables.
 
 ## 3. Lectura de los PDF
 
@@ -109,7 +110,7 @@ De cada bloque se extraen, entre otros:
 - fecha del parte;
 - archivo y páginas de origen.
 
-El corpus local utilizado durante esta fase contiene ocho PDF y produce 48
+El corpus local utilizado durante esta primera fase contenía ocho PDF y producía 48
 snapshots: 47 de España y uno de Portugal. El registro portugués se conserva
 en el índice y puede incluirse o excluirse mediante el metadato `country`.
 
@@ -399,7 +400,6 @@ El diseño completo se encuentra en
 | `src/miteco_rag/metadata_store.py` | Construcción e índices de la base SQLite de metadatos |
 | `src/miteco_rag/metadata_queries.py` | Traducción segura del `where` y agregaciones SQL |
 | `src/miteco_rag/retrieval_chroma.py` | Retrieval híbrido, de extremos y de recuentos con contrato común |
-| `src/miteco_rag/extras/retrieval_chroma_solution.py` | Implementación de referencia |
 | `src/miteco_rag/augmented_generator.py` | Contexto y generación con Ollama |
 | `src/miteco_rag/main_langgraph.py` | Punto de entrada vigente del MVP |
 | `scripts/inspect_chroma.py` | Inspección manual de la colección local |
@@ -455,8 +455,8 @@ analysis = build_deterministic_analysis(query, catalog)
 El revisor recibe el objeto completo y ya no carga Chroma ni reconstruye el
 catálogo. El retrieval recibe el modelo, la colección y el filtro final como
 dependencias. En aquella versión, `main.py` actuaba como orquestador lineal de
-estas fases; actualmente se conserva en `src/miteco_rag/extras/` y la
-orquestación vigente reside en LangGraph.
+estas fases. La versión histórica se retiró del repositorio público al
+consolidarse LangGraph como única orquestación vigente.
 
 La trazabilidad estructurada se ha discutido, pero se implementará más
 adelante. Se separará el historial conversacional de los eventos técnicos del
@@ -702,11 +702,9 @@ El nodo de selección reconstruye `RetrievalMode` únicamente donde hace falta.
 Lee directamente los registros de `SqliteSaver`, muestra los canales guardados
 y evita cargar BGE-M3, Chroma y el catálogo durante una inspección.
 
-El punto de entrada lineal desactualizado se archivó como
-`src/miteco_rag/extras/main_lineal_obsoleto.py`. Sigue esperando la firma
-anterior de `loader()` y no contiene el routing de `min_max` y `count`; se
-conserva solo como referencia. El punto de entrada vigente es
-`main_langgraph.py`.
+El punto de entrada lineal desactualizado se retiró al no cumplir el contrato
+actual ni contener el routing de `min_max` y `count`. El único punto de entrada
+vigente es `main_langgraph.py`.
 
 En aquel cierre de fase quedaron fuera el retrieval `timeline`, el tratamiento
 defensivo de planes incompletos y la conversación multiturno. Los párrafos
@@ -755,7 +753,7 @@ El bouncer acepta consultas implícitas propias de este asistente, como pregunta
 por la primera o última fecha registrada en una provincia, sin dejar de
 rechazar preguntas geográficas vagas o claramente ajenas a incendios.
 
-La fase queda validada con 141 pruebas automatizadas y varias conversaciones
+La fase queda validada con pruebas automatizadas y varias conversaciones
 reales. La indexación vectorial incremental se incorporó a continuación.
 
 ## 25. Indexación vectorial incremental
@@ -772,9 +770,10 @@ firma modificada  → recalcular embedding y actualizar
 ID desaparecido   → informar como obsoleto, sin eliminarlo
 ```
 
-La migración inicial y la incorporación de los partes nuevos finalizaron con
-309 snapshots coincidentes en JSONL, Chroma y SQLite, cero pendientes y cero
-obsoletos. Una segunda ejecución terminó sin cargar el modelo de embeddings.
+La migración inicial y la incorporación de los partes disponibles finalizaron
+con los snapshots coincidentes en JSONL, Chroma y SQLite, cero pendientes y
+cero obsoletos. Una segunda ejecución terminó sin cargar el modelo de
+embeddings.
 
 Esto completa la indexación incremental de Chroma, pero no convierte todavía
 en incremental toda la ingesta: el parser reconstruye el JSONL desde todos los
@@ -782,6 +781,23 @@ PDF y `metadata_store.py` vuelve a ejecutar un `upsert` de todas las filas. La
 eliminación segura de IDs obsoletos también permanece pendiente.
 
 El parseo incremental queda registrado como mejora no urgente. La ejecución
-completa de los 55 partes actuales tarda aproximadamente 2–3 segundos, por lo
+completa del corpus actual tarda solo unos segundos, por lo
 que la complejidad adicional de mantener un manifiesto de parseo no aporta aún
 una mejora relevante frente a las tareas de robustez del RAG.
+
+## 26. Limpieza para publicación
+
+Antes de compartir el repositorio se separó el material ejecutable del material
+auxiliar. Los prototipos sustituidos y su prueba dependiente se eliminaron del
+paquete. Los apuntes, notebooks, revisiones internas y recursos de presentación
+se mantienen en el equipo local, pero se excluyen mediante `.gitignore`.
+
+Se conservaron `scripts/inspect_chroma.py` y
+`scripts/inspect_checkpoints.py` porque son herramientas vigentes para revisar
+los índices y la memoria sin ejecutar el flujo completo. También se actualizaron
+el README, la arquitectura y la guía de pruebas para evitar cifras y enlaces
+obsoletos.
+
+En la validación del 16 de septiembre de 2026, el corpus contenía 58 PDF y 324
+snapshots, con fechas entre el 5 de julio y el 7 de septiembre de 2026. La suite
+completa contenía 137 pruebas.

@@ -1,611 +1,209 @@
-# Arquitectura del workflow RAG con LangGraph
+# Workflow RAG con LangGraph
 
-Fecha de decisión: 2026-07-23. Primera implementación: 2026-08-03.
+Primera decisión de arquitectura: 23 de julio de 2026. Primera implementación: 3 de agosto de 2026. Estado actualizado: 16 de septiembre de 2026.
 
-Este documento define la arquitectura acordada para incorporar LLM al RAG de
-incendios de MITECO. La primera versión funcional del grafo ya implementa la
-clasificación, el análisis determinista, la revisión de filtros, la corrección
-opcional, el retrieval, la generación y la conversación multiturno. Las ramas
-de evaluación de contexto y reintento descritas más adelante siguen siendo
-evolución prevista.
-
-El sistema se construirá como un **workflow controlado con LangGraph**. No todos
-los nodos utilizarán inteligencia artificial: las operaciones que puedan
-resolverse de forma segura, reproducible y comprobable continuarán siendo
-deterministas.
+Este documento describe el grafo ejecutable de `src/miteco_rag/rag_graph.py`. LangGraph se utiliza como workflow controlado: organiza funciones deterministas y llamadas al LLM, conserva el estado y decide las ramas, pero no delega el control completo a un agente autónomo.
 
 ## 1. Objetivos
 
-El workflow deberá:
+- Mantener conversaciones con preguntas de seguimiento.
+- Rechazar consultas ajenas al dominio antes de recuperar documentos.
+- Conservar el parser determinista de metadatos como línea base explicable.
+- Usar el LLM solo para revisar o corregir casos lingüísticos difíciles.
+- Validar todas las salidas estructuradas antes de construir un filtro.
+- Elegir una recuperación adecuada para cada tipo de pregunta.
+- Mantener una traza persistente y serializable de cada turno.
+- Generar respuestas limitadas a los registros recuperados.
 
-- rechazar preguntas claramente ajenas al dominio;
-- mantener el parser determinista de metadatos como línea base;
-- utilizar un LLM para revisar y completar la interpretación;
-- impedir que el LLM construya directamente filtros libres de Chroma;
-- reconciliar filtros campo por campo y conservar su procedencia;
-- elegir el tipo de recuperación adecuado para cada pregunta;
-- distinguir una ausencia real de coincidencias de un contexto semántico malo;
-- permitir como máximo un segundo retrieval;
-- generar respuestas fundamentadas en los documentos recuperados;
-- mantener un estado auditable durante todo el recorrido.
-
-## 2. Principios de diseño
-
-### LangGraph como workflow, no como agente libre
-
-LangGraph conectará nodos y decidirá las rutas mediante aristas condicionales.
-El LLM no podrá llamar herramientas o repetir consultas indefinidamente.
-
-### IA solo donde aporta valor
-
-Seguirán siendo deterministas:
-
-- el parser actual;
-- la normalización de metadatos;
-- la validación Pydantic;
-- la detección de contradicciones;
-- la reconciliación de filtros;
-- la construcción del `where`;
-- la llamada a Chroma;
-- los límites de reintentos.
-
-Los LLM se utilizarán para:
-
-- clasificar preguntas difíciles;
-- revisar la interpretación lingüística;
-- proponer información que no detecten las reglas;
-- evaluar aspectos semánticos del contexto;
-- reformular una consulta cuando proceda;
-- redactar la respuesta final.
-
-### Salidas estructuradas y validadas
-
-Los LLM devolverán objetos conceptuales como `QueryIntent`,
-`FilterReview` o `ContextEvaluation`. No devolverán código ni diccionarios
-`where` que se ejecuten directamente.
-
-### Trazabilidad
-
-El estado conservará la pregunta, los filtros deterministas, la revisión del
-LLM, los filtros finales, la procedencia de cada campo, los documentos
-recuperados y el motivo de cada bifurcación.
-
-## 3. Grafo general
+## 2. Grafo actual
 
 ```text
 START
   │
   ▼
-deterministic_parse
+PrepareTurn
   │
   ▼
-review_query_with_llm
+RewriteQuery
   │
-  ├── unrelated/out_of_scope ──> reject ──> END
-  ├── ambiguous ───────────────> clarify ─> END
-  └── related
-          │
-          ▼
-reconcile_and_validate_filters
-          │
-          ▼
-choose_retrieval_mode
-          │
-          ▼
-retrieve_from_chroma
-          │
-          ▼
-evaluate_context
-  │
-  ├── sufficient ──────────────> generate_answer ──> END
-  ├── no_matching_records ─────> no_data_answer ───> END
-  ├── insufficient + intento 0 ─> replan_query
-  │                                  │
-  │                                  └──> retrieve_from_chroma
-  └── insufficient + intento 1 ─> limited_answer ──> END
+  ▼
+Bouncer
+  ├── NO GO ──────────────────────────────────────────────> END
+  └── GO
+       │
+       ▼
+DeterministicAnalysis
+       │
+       ▼
+Reviewer
+  ├── clarify ────────────────────────────────────────────> END
+  ├── keep ────────────────────────────────┐
+  └── extend / replace                     │
+       │                                   │
+       ▼                                   │
+GenerateFilter                             │
+       │                                   │
+       ▼                                   │
+ResolveWhere                               │
+       └───────────────────────────────────┘
+                         │
+                         ▼
+                  RetrievalMode
+                     ├── hybrid  -> Retrieve ──────────┐
+                     ├── min_max -> MinMaxRetrieve ───┤
+                     └── count   -> CountRetrieve ────┤
+                                                       ▼
+                                                GenerateContext
+                                                       │
+                                                       ▼
+                                                GenerateAnswer
+                                                       │
+                                                       ▼
+                                                      END
 ```
 
-Este flujo incorpora un único ciclo. Tras una recuperación insuficiente se
-puede reformular y consultar otra vez, pero el segundo resultado debe terminar
-en respuesta o abstención.
+La detección de `timeline` existe en `retrieval_mode.py`, pero todavía no tiene nodo ni arista de recuperación. No forma parte del flujo operativo actual.
 
-## 4. Comparación de interpretaciones
+## 3. Estado compartido
 
-Durante el desarrollo se conservarán de manera independiente el resultado
-determinista y la revisión del LLM:
+`GraphState` es un `TypedDict` con campos opcionales para que cada nodo escriba únicamente su resultado:
 
-```text
-                    ┌── deterministic_parse ──┐
-Pregunta normalizada┤                         ├── reconcile_and_validate
-                    └────── llm_review ───────┘
-```
+| Campo | Contenido |
+|---|---|
+| `messages` | Historial de usuario y asistente, con reductor aditivo |
+| `user_query` | Última entrada literal del usuario |
+| `query` | Consulta autónoma después de la reescritura |
+| `decision` | `GO` o `NO GO` |
+| `analysis` | Análisis determinista serializado |
+| `review` | Revisión LLM serializada |
+| `proposal` | Propuesta de filtros serializada, si existe |
+| `deterministic_where` | Filtro producido por reglas |
+| `final_where` | Filtro validado que recibe la recuperación |
+| `retrieval_mode` | Plan serializado: híbrido, extremo o recuento |
+| `raw_context` | `RetrievalResult` común |
+| `context` | Texto preparado para el generador |
+| `answer` | Respuesta final |
 
-La ejecución no tiene que ser físicamente paralela desde la primera versión.
-Lo importante es que ambas interpretaciones se almacenen por separado para
-poder compararlas y evaluarlas.
+Los modelos Pydantic se convierten mediante `model_dump(mode="json")` antes de entrar en el estado. Los nodos que necesitan sus métodos los reconstruyen con `model_validate()`. Así los checkpoints no dependen de objetos Python complejos.
 
-## 5. Estado compartido
+El modelo de embeddings, el cliente y la colección de Chroma, el catálogo y la conexión SQLite no forman parte del estado. Son recursos con ciclo de vida externo que `main_langgraph.py` carga una vez e inyecta mediante `functools.partial` al construir el grafo.
 
-El estado de LangGraph tendrá, como mínimo, estos grupos de información:
+## 4. Preparación de la conversación
+
+### `PrepareTurn`
+
+`prepare_turn()` obtiene la última pregunta del historial, la guarda como `user_query` y limpia los campos técnicos que no deben arrastrarse desde el turno anterior. No borra `messages`.
+
+### `RewriteQuery`
+
+En el primer turno, `rewrite_query()` conserva una pregunta que ya es autónoma. Ante referencias como «allí», «ese día» o «¿y en Palencia?», utiliza Ollama para combinar la nueva entrada con el historial y producir una consulta independiente. El resto del grafo trabaja con `query`, no con la frase incompleta.
+
+### Memoria
+
+`main_langgraph.py` crea un `thread_id` por sesión y lo reutiliza en todas las llamadas a `graph.invoke()`. `SqliteSaver` guarda los estados en `data/checkpoints/langgraph.sqlite`. El historial puede inspeccionarse sin cargar BGE-M3 ni Chroma mediante `scripts/inspect_checkpoints.py`.
+
+## 5. Admisión e interpretación
+
+### `Bouncer`
+
+`bouncer()` devuelve una decisión Pydantic binaria. `NO GO` genera una respuesta predeterminada, la añade al historial y termina. `GO` continúa. El prompt acepta referencias conversacionales reescritas y consultas implícitas propias del asistente, como pedir la última fecha registrada.
+
+### `DeterministicAnalysis`
+
+`build_deterministic_analysis(query, catalog)` se ejecuta una sola vez por turno. Conserva:
+
+- `parsed_query`: consulta normalizada, `MetadataFilters` y ambigüedades;
+- `deterministic_where`: diccionario compatible con Chroma o `None`;
+- la última fecha del catálogo cuando resulta necesaria para interpretar el presente.
+
+### `Reviewer`
+
+El LLM compara la pregunta con el análisis y devuelve un `FilterReview`:
+
+- `keep`: coherente y suficiente; copia `deterministic_where` a `final_where`;
+- `extend`: debe añadir condiciones;
+- `replace`: debe sustituir una interpretación incorrecta;
+- `clarify`: no debe consultar hasta que el usuario aclare la intención.
+
+### `GenerateFilter` y `ResolveWhere`
+
+Solo se ejecutan para `extend` y `replace`. El LLM propone condiciones y grupos lógicos en un `FilterProposal`; nunca entrega un `where` libre para ejecutarlo directamente. El código valida los campos, operadores, tipos y valores canónicos, traduce la propuesta al formato de Chroma y resuelve el filtro final según la acción del revisor.
+
+## 6. Selección y ejecución del retrieval
+
+### `RetrievalMode`
+
+`choose_retrieval_mode()` usa reglas reproducibles:
+
+- preguntas descriptivas -> `hybrid`;
+- primera, última, menor o mayor fecha -> `min_max`;
+- cuántos incendios, snapshots o partes -> `count`;
+- expresiones de evolución -> `timeline`, todavía sin ruta ejecutable.
+
+### `Retrieve`
+
+Genera un embedding normalizado de `query`, aplica `final_where` cuando existe y solicita a Chroma hasta diez resultados ordenados por similitud. Chroma filtra primero y ordena semánticamente dentro de las coincidencias.
+
+### `MinMaxRetrieve`
+
+Recibe la operación `min` o `max`. SQLite traduce el `where`, calcula la fecha extrema dentro de ese conjunto filtrado y devuelve todos los identificadores empatados en la fecha. Chroma recupera los documentos asociados por ID. Este orden garantiza que «último incendio de León» calcule el máximo de León y no la fecha global del corpus.
+
+### `CountRetrieve`
+
+SQLite devuelve un agregado exacto de incendios únicos, snapshots o informes. No se carga el modelo de embeddings ni se recuperan chunks. El valor cero se conserva como evidencia válida.
+
+Los tres nodos producen `RetrievalResult`:
 
 ```python
-class RAGState(TypedDict):
-    # Entrada
-    question: str
-    normalized_question: str
-
-    # Interpretación
-    deterministic_filters: MetadataFilters | None
-    deterministic_ambiguities: list[str]
-    llm_review: FilterReview | None
-    resolved_filters: MetadataFilters | None
-    filter_provenance: dict[str, str]
-    filter_warnings: list[str]
-
-    # Plan de recuperación
-    semantic_query: str
-    where: dict | None
-    retrieval_plan: dict[str, object]
-    top_k: int
-
-    # Resultado
-    raw_context: dict[str, object]
-
-    # Control
-    retrieval_attempts: int
-    context_status: str
-    errors: list[str]
-
-    # Salida
-    final_answer: str | None
+{
+    "mode": "hybrid | min_max | count",
+    "ids": [],
+    "documents": [],
+    "metadatas": [],
+    "distances": None,
+    "aggregate": None,
+}
 ```
 
-La definición definitiva podrá dividir modelos internos y estado del grafo,
-pero estos datos deben conservarse para permitir auditoría y pruebas.
+Esto permite que las ramas converjan sin duplicar la lógica posterior.
 
-## 6. Nodos del workflow
+## 7. Contexto y respuesta
 
-### 6.1. `deterministic_parse`
+`GenerateContext` transforma documentos o agregados en texto. `GenerateAnswer` envía a Ollama la pregunta autónoma, el contexto y el filtro aplicado. El prompt distingue:
 
-Ejecuta el parser actual:
+- `WITH_DATA`: existen documentos o un agregado exacto, incluido cero;
+- `NO_DATA`: no se recuperaron registros.
 
-```python
-parse_metadata_filters(question, catalog)
-```
+Una ausencia se formula como «no consta en los registros disponibles», no como prueba de que nunca haya existido un incendio. La respuesta del asistente se añade a `messages` para que pueda utilizarse en el turno siguiente.
 
-Produce filtros, ambigüedades y el análisis temporal conocido. No abre Chroma
-para recuperar documentos ni llama al LLM.
+## 8. Routing y terminación
 
-El parser determinista se mantiene porque es rápido, explicable, reproducible
-y fiable en los casos cubiertos por pruebas.
+Las funciones de routing leen datos simples del estado:
 
-### 6.2. `review_query_filters`
+- `route_after_bouncer`: continúa solo con `GO`;
+- `route_after_reviewer`: decide `generate`, `keep` o `end`;
+- `route_after_retrieval_mode`: decide `hybrid`, `min_max` o `count`.
 
-Este componente ya está implementado como función independiente en
-`revisor_query_filters.py`. Recibe la pregunta y el análisis determinista y
-devuelve un `FilterReview` validado:
+No existen ciclos automáticos ni llamadas ilimitadas a herramientas. Cada turno termina después de una sola recuperación y una sola generación, salvo las terminaciones anticipadas.
 
-```python
-class FilterReview(BaseModel):
-    action: Literal["keep", "extend", "replace", "clarify"]
-    coherent: bool
-    sufficient: bool
-    issues: list[str]
-    explanation: str
-```
+## 9. Pruebas y trazabilidad
 
-El revisor no clasifica el dominio, no genera todavía los filtros corregidos y
-no consulta Chroma. Las cuatro acciones permiten conservar los filtros,
-ampliarlos, sustituir una interpretación incorrecta o pedir aclaración.
+Las pruebas del grafo sustituyen LLM, embeddings y almacenes por dobles. Comprueban las tres rutas operativas, la propagación de filtros, `NO GO`, `clarify`, `replace`, la convergencia en generación y la acumulación de mensajes durante varios turnos.
 
-Las pruebas reales iniciales cubrieron `keep`, `replace`, `clarify` y una
-consulta semántica con `where=null`. Quedan pendientes las pruebas
-automatizadas con Ollama y Chroma simulados, incluido el caso `extend`.
+Los checkpoints conservan la evolución del estado. `scripts/inspect_checkpoints.py` permite revisar canales, pasos y valores sin abrir los recursos del RAG.
 
-### 6.3. `generate_filter_proposal`
+## 10. Trabajo pendiente
 
-Está implementado como función independiente y se ejecuta únicamente para
-`extend` o `replace`. Devuelve una intención Pydantic con campos, operadores y
-grupos lógicos `AND/OR`; no escribe directamente un diccionario libre de
-Chroma.
+- Implementar el retrieval y routing de `timeline`.
+- Añadir pruebas unitarias aisladas de los tres componentes LLM y de JSON inválido.
+- Evaluar filtros, recuperación y respuesta con un conjunto estable de preguntas.
+- Estudiar una evaluación de suficiencia del contexto y, solo si aporta valor medible, un único reintento controlado.
+- Definir una política común de reintentos ante fallos transitorios de Ollama.
+- Añadir trazas de evaluación separadas del historial conversacional si se necesitan métricas de producción.
 
-El código determinista ya comprueba campos permitidos, compatibilidad básica
-entre operadores y valores, y fechas, y traduce condiciones y grupos al
-`where`. Quedan pendientes la validación completa contra catálogo, los
-duplicados y las contradicciones internas.
+## 11. Referencias
 
-### 6.4. `classify_domain`
-
-La primera versión se ha implementado en `bouncer.py` como componente
-independiente del revisor mediante una decisión binaria:
-
-```python
-Literal["GO", "NO GO"]
-```
-
-`GO` permite continuar y `NO GO` devuelve un rechazo predeterminado. El prompt
-evalúa la intención principal y no acepta palabras aisladas como prueba de
-pertenencia al dominio.
-
-Una versión posterior podrá sustituir esta decisión por la taxonomía más rica
-prevista originalmente:
-
-```python
-Literal[
-    "miteco_fire_related",
-    "fire_related_but_out_of_scope",
-    "unrelated",
-    "uncertain",
-]
-```
-
-Ejemplos:
-
-| Pregunta | Clasificación |
-| --- | --- |
-| ¿Qué incendios hay en León? | `miteco_fire_related` |
-| ¿Cómo apago un fuego en una sartén? | `fire_related_but_out_of_scope` |
-| ¿Cuál es la capital de Francia? | `unrelated` |
-| ¿Se cortó la carretera de Villablino? | `uncertain` |
-
-Solo las preguntas claramente ajenas o fuera del alcance producirán un rechazo
-inmediato. Las inciertas podrán continuar o solicitar una aclaración.
-
-### 6.5. `reject`
-
-Devuelve un mensaje predeterminado cuando la pregunta no está relacionada con
-el ámbito del RAG:
-
-> Este sistema está especializado en los partes de incendios forestales de
-> MITECO y no dispone de información para responder esa pregunta.
-
-El texto definitivo se decidirá al implementar la interfaz.
-
-### 6.6. `clarify`
-
-Solicita una aclaración cuando la pregunta admite interpretaciones
-incompatibles y no es seguro escoger una.
-
-No se utilizará la similitud semántica para ocultar una ambigüedad importante.
-
-### 6.7. `reconcile_and_validate_filters`
-
-Es un nodo determinista. Compara los filtros originales y la propuesta del LLM
-campo por campo.
-
-No se aplicarán estas reglas simplistas:
-
-- descartar todos los filtros deterministas si uno es incorrecto;
-- añadir todos los filtros del LLM cuando falte alguno.
-
-La reconciliación conservará los campos correctos y sustituirá o añadirá solo
-los que correspondan.
-
-Ejemplo:
-
-```text
-Pregunta:
-    Incendios de León que ardían durante julio
-
-Parser determinista:
-    provincia = León
-    fecha = julio
-
-Revisión LLM:
-    falta estado ACTIVO
-    la consulta es histórica
-
-Resultado:
-    provincia = León                [determinista]
-    fecha = 01/07–31/07             [determinista]
-    estado = ACTIVO                 [LLM]
-```
-
-La salida conservará la procedencia:
-
-```python
-class ResolvedFilters(BaseModel):
-    filters: MetadataFilters
-    provenance: dict[
-        str,
-        Literal["deterministic", "llm", "combined"],
-    ]
-    warnings: list[str]
-```
-
-Reglas iniciales de reconciliación:
-
-- mantener entidades geográficas explícitas detectadas exactamente;
-- mantener negaciones explícitas salvo contradicción demostrable;
-- mantener fechas explícitas válidas;
-- permitir que el LLM complete interpretaciones implícitas;
-- impedir que un valor quede incluido y excluido simultáneamente;
-- marcar como ambigua una incompatibilidad que no pueda resolverse;
-- normalizar y validar todos los valores antes de continuar.
-
-Después de reconciliar:
-
-```python
-where = build_chroma_where(resolved_filters.filters)
-```
-
-El LLM nunca construye ni ejecuta directamente ese diccionario.
-
-### 6.8. `choose_retrieval_mode`
-
-Selecciona el tipo de recuperación según la intención de la pregunta:
-
-```python
-Literal[
-    "hybrid",
-    "min_max",
-    "count",
-    "timeline",
-]
-```
-
-| Pregunta | Modo previsto |
-| --- | --- |
-| Incendios parecidos al de Villablino | `hybrid` sin `where` |
-| Incendios activos relevantes en León | `hybrid` con `where` |
-| ¿Cuál es la última fecha registrada? | `min_max`, operación `max` |
-| ¿Cuántos incendios hubo en julio? | `count` |
-| ¿Cómo evolucionó Villablino? | `timeline` |
-
-`RetrievalMode` conserva además `operation` para `min_max` y `count_target`
-para distinguir incendios, snapshots e informes. Esto evita utilizar siempre
-`top_k`: los extremos y recuentos se calculan de forma exacta en SQLite.
-
-### 6.9. `retrieve_from_chroma`
-
-Ejecuta el plan validado:
-
-- `retrieve()` utiliza `collection.query()` para ranking semántico o híbrido;
-- `retrieve_min_max()` calcula el extremo filtrado en SQLite y recupera los
-  documentos seleccionados mediante `collection.get(ids=...)`;
-- `retrieve_count()` ejecuta el recuento exacto en SQLite sin cargar documentos
-  ni embeddings;
-- la recuperación y orden temporal para evoluciones queda pendiente.
-
-Las ramas devuelven el mismo `RetrievalResult`, con el modo, IDs, documentos,
-metadatos, distancias y agregado opcional. El nodo registrará también el
-`where`, la operación o el objetivo de recuento.
-
-### 6.10. `evaluate_context`
-
-Evalúa el resultado antes de permitir la generación. Primero ejecutará
-comprobaciones deterministas y solo utilizará un LLM cuando sea necesario
-evaluar aspectos semánticos.
-
-Estados posibles:
-
-```python
-Literal[
-    "sufficient",
-    "no_matching_records",
-    "poor_semantic_match",
-    "incomplete_coverage",
-    "ambiguous_question",
-]
-```
-
-#### Contexto suficiente
-
-Los documentos cumplen los filtros y contienen información apropiada para
-responder.
-
-#### Sin coincidencias exactas
-
-Un `where` válido devuelve cero documentos. Esto no se interpreta
-automáticamente como un error de retrieval ni autoriza a quitar filtros.
-
-Ejemplo:
-
-> No constan incendios de Palencia en el último parte disponible del corpus.
-
-#### Mala coincidencia semántica
-
-Se obtienen vecinos, pero sus distancias o contenidos no justifican una
-respuesta. Puede activarse la reformulación.
-
-#### Cobertura incompleta
-
-Se solicitan varias entidades, pero el `top_k` no contiene todas. Antes de
-afirmar que una provincia carece de registros, se comprobará con `get()` o con
-consultas separadas.
-
-### 6.11. `replan_query`
-
-Solo se alcanza si:
-
-- el contexto es insuficiente;
-- la ausencia no es una respuesta exacta válida;
-- `retrieval_attempts == 1`.
-
-Puede proponer:
-
-- una consulta semántica reformulada;
-- un modo de retrieval diferente;
-- un `top_k` distinto;
-- consultas separadas por entidad;
-- filtros corregidos y nuevamente validados.
-
-Después vuelve a `retrieve_from_chroma`. No puede iniciarse un tercer
-retrieval.
-
-### 6.12. `generate_answer`
-
-Recibe la pregunta, los filtros finales y el contexto considerado suficiente.
-
-La respuesta deberá:
-
-- utilizar únicamente información respaldada por el contexto;
-- indicar la fecha de referencia;
-- distinguir el último parte disponible de la actualidad real;
-- citar archivo y página;
-- reconocer explícitamente las limitaciones del corpus;
-- no afirmar inexistencia histórica a partir de una ausencia en `top_k`.
-
-### 6.13. `no_data_answer`
-
-Responde de forma controlada cuando una consulta exacta no tiene coincidencias.
-No necesita inventar una consulta más amplia ni presentar incendios de otra
-ubicación.
-
-### 6.14. `limited_answer`
-
-Si el contexto sigue siendo insuficiente tras el segundo retrieval, el sistema
-se abstiene o responde solo la parte respaldada, explicando la limitación.
-
-## 7. Ramas de evaluación del contexto
-
-```text
-retrieve_from_chroma
-          │
-          ▼
- evaluate_context
-   ┌──────┼───────────────┬──────────────────────┐
-   │      │               │                      │
-suficiente  cero exacto  contexto pobre     cobertura incompleta
-   │      │               │                      │
-responder no_data    ¿queda reintento?       comprobar entidades
-                         │                      con get()
-                    ┌────┴────┐                  │
-                    │         │                  └── evaluar otra vez
-                   sí         no
-                    │         │
-                reformular  respuesta limitada
-                    │
-                    └── segundo y último retrieval
-```
-
-## 8. Control de costes y llamadas al LLM
-
-La separación conceptual en nodos no implica utilizar un modelo diferente en
-cada uno.
-
-El diseño mantiene funciones independientes para poder evaluarlas y
-reemplazarlas. No todas se ejecutan en todas las preguntas:
-
-1. clasificación de dominio;
-2. revisión de filtros;
-3. propuesta de intención solo para `extend` o `replace`;
-4. evaluación o reformulación solo ante un contexto difícil;
-5. generación de la respuesta.
-
-Las preguntas fuera de dominio terminan tras la clasificación. Las consultas
-con filtros válidos no llaman al generador de intención y las consultas simples
-no requieren reformulación. Más adelante se medirá si conviene combinar
-clasificación y revisión para reducir latencia y coste.
-
-## 9. Ollama Cloud y validación
-
-Ollama Cloud permite utilizar modelos que no caben en el equipo local. La
-primera implementación con `gemma4:31b-cloud` ha devuelto correctamente
-respuestas conforme al JSON Schema de `FilterReview`.
-
-La integración utiliza:
-
-1. instrucciones explícitas y datos de entrada serializados como JSON;
-2. `format=FilterReview.model_json_schema()`;
-3. temperatura cero;
-4. validación mediante `model_validate_json()`.
-
-Queda pendiente probar respuestas inválidas y decidir si se permitirá un único
-intento controlado de reparación antes de utilizar el parser determinista o
-devolver un error.
-
-## 10. Persistencia y memoria
-
-La implementación utiliza `SqliteSaver` y un `thread_id`. Los checkpoints se
-conservan localmente después de cerrar Python y `GraphState.messages` mantiene
-el historial que necesitan las preguntas consecutivas:
-
-```text
-Usuario: ¿Qué incendios hay en Castilla y León?
-Usuario: ¿Y cuáles están activos?
-```
-
-`PrepareTurn` selecciona la nueva pregunta y limpia los resultados técnicos
-anteriores. `RewriteQuery` recibe una ventana limitada del historial y resuelve
-referencias como `cuáles`, `allí` o `ese día`. Los mensajes conversacionales se
-mantienen separados de la traza técnica de nodos, filtros y documentos.
-
-## 11. Evaluación académica
-
-Se creará un conjunto de preguntas con:
-
-- clasificación de dominio esperada;
-- filtros esperados;
-- tipo de retrieval esperado;
-- documentos o recuentos esperados;
-- decisión de suficiencia esperada;
-- respuesta o abstención esperada.
-
-Se compararán:
-
-1. parser determinista;
-2. parser LLM;
-3. resultado reconciliado;
-4. retrieval final.
-
-Las métricas podrán incluir precisión de entidades, exactitud de filtros,
-cobertura, tasa de consultas inválidas, número medio de llamadas al LLM y
-porcentaje de respuestas correctamente fundamentadas.
-
-## 12. Orden de implementación acordado
-
-No se implementará todo el grafo a la vez.
-
-1. ~~Definir el modelo Pydantic de revisión.~~
-2. ~~Implementar el revisor LLM como función independiente.~~
-3. Añadir pruebas simuladas para las cuatro acciones, JSON inválido y entrada
-   vacía.
-4. ~~Completar la intención Pydantic con condiciones y grupos lógicos.~~
-5. ~~Implementar el generador LLM de filtros para `extend` y `replace`.~~
-6. Ampliar la validación y reconciliación deterministas de las propuestas.
-7. ~~Implementar la primera versión binaria del clasificador de dominio.~~
-8. Crear un conjunto inicial de preguntas de evaluación.
-9. ~~Corregir los imports internos y construir `rag_graph.py`.~~
-10. ~~Serializar de forma segura los modelos Pydantic almacenados en el estado.~~
-11. ~~Integrar en el grafo la selección de modo y los retrievals `min_max` y
-    `count`.~~
-12. ~~Desacoplar el inspector de checkpoints de BGE-M3 y Chroma.~~
-13. Añadir evaluación de contexto y un único reintento.
-14. ~~Incorporar generación fundamentada.~~
-15. ~~Incorporar historial conversacional.~~
-
-## 13. Decisiones pendientes
-
-Quedan por determinar mediante experimentación:
-
-- evaluación comparativa del modelo concreto de Ollama Cloud;
-- evolución del prompt y de los esquemas;
-- criterio para activar `clarify`;
-- umbral de mala similitud semántica;
-- tamaño inicial de `top_k`;
-- política de recuperación por cada entidad solicitada;
-- contrato del futuro modo `timeline` y de posibles consultas exhaustivas;
-- formato final de citas;
-- almacenamiento de trazas y resultados de evaluación.
-
-La traza técnica ya se persiste mediante checkpoints SQLite. Los modelos
-Pydantic se convierten en datos compatibles con JSON antes de entrar en el
-estado y se reconstruyen dentro de los nodos cuando es necesario. El historial
-conversacional permanecerá en `messages` y no se mezclará con las decisiones
-técnicas de cada fase.
-
-La implementación actual abre Chroma y SQLite en `main_langgraph.py`, inyecta
-sus dependencias al construir el grafo y las cierra al salir. El nodo
-`ChooseRetrievalMode` ya gobierna las ramas `hybrid`, `min_max` y `count`; todas
-producen el mismo contrato `RetrievalResult` y convergen en la generación. El
-script lineal antiguo se conserva en `src/miteco_rag/extras/` como referencia
-histórica y no forma parte de la arquitectura ejecutable.
-
-## 14. Referencias
-
-- [LangGraph: workflows y agentes](https://docs.langchain.com/oss/python/langgraph/workflows-agents)
+- [Arquitectura técnica general](ARQUITECTURA.md)
 - [LangGraph: Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api)
 - [LangGraph: persistencia](https://docs.langchain.com/oss/python/langgraph/persistence)
 - [Ollama: Structured Outputs](https://docs.ollama.com/capabilities/structured-outputs)
-- [Ollama Cloud](https://docs.ollama.com/cloud)
