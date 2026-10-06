@@ -75,6 +75,31 @@ def test_extract_report_date_from_pdf() -> None:
     assert extract_report_date(make_report_pdf()) == date(2026, 7, 24)
 
 
+def test_extract_report_date_from_last_update_when_explicit_date_is_missing() -> None:
+    pdf_bytes = make_report_pdf(
+        report_date_text=(
+            "Ultima actualizacion:\n"
+            "9:05:51 del dia 06/10/2026"
+        )
+    )
+
+    assert extract_report_date(pdf_bytes) == date(2026, 10, 5)
+
+
+def test_extract_report_date_prefers_explicit_report_date() -> None:
+    pdf_bytes = make_report_pdf(
+        report_date_text="domingo, 4 de octubre de 2026",
+        extra_text="Ultima actualizacion: 9:06:09 del dia 05/10/2026",
+    )
+
+    assert extract_report_date(pdf_bytes) == date(2026, 10, 4)
+
+
+def test_extract_report_date_rejects_pdf_without_any_date() -> None:
+    with pytest.raises(DownloadError, match="ni la fecha de su ultima"):
+        extract_report_date(make_report_pdf(report_date_text="Sin fecha"))
+
+
 @pytest.mark.parametrize(
     ("pdf_bytes", "content_type", "message"),
     [
@@ -112,6 +137,30 @@ def test_archive_new_report_and_write_manifest(tmp_path: Path) -> None:
     assert manifest[0]["report_date"] == "2026-07-24"
     assert manifest[0]["filename"] == result.path.name
     assert manifest[0]["previous_sha256"] is None
+
+
+def test_archive_report_using_date_inferred_from_last_update(
+    tmp_path: Path,
+) -> None:
+    pdf_bytes = make_report_pdf(
+        report_date_text=(
+            "Ultima actualizacion:\n"
+            "9:05:51 del dia 06/10/2026"
+        )
+    )
+
+    result = archive_report(
+        pdf_bytes=pdf_bytes,
+        content_type="application/pdf",
+        report_link=ReportLink("Parte", "https://example.test/report.pdf"),
+        output_dir=tmp_path,
+        expected_date=date(2026, 10, 5),
+    )
+
+    assert result.status == "downloaded"
+    assert result.report_date == date(2026, 10, 5)
+    assert result.path.name == "ActuacionesMITECO-definitivo-2026-10-05.pdf"
+    assert read_manifest(tmp_path)[0]["report_date"] == "2026-10-05"
 
 
 def test_archive_same_hash_is_idempotent(tmp_path: Path) -> None:

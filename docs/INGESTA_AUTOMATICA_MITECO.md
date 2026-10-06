@@ -22,7 +22,7 @@ descubrimiento del enlace "Parte Definitivo..."
         ↓
 descarga y validación del PDF
         ↓
-extracción de la fecha escrita en la primera página
+extracción de la fecha del parte o inferencia desde su actualización
         ↓
 comprobación: fecha del parte = ayer en Europe/Madrid
         ↓
@@ -60,8 +60,15 @@ Antes de escribir un archivo, el programa comprueba:
 4. que el tipo MIME, cuando se proporciona, corresponde a un PDF;
 5. que PyMuPDF puede abrirlo;
 6. que contiene el encabezado real de intervenciones del Ministerio;
-7. que se puede extraer una fecha española de su primera página;
+7. que se puede extraer la fecha española del parte o, si MITECO omite esa
+   línea, la fecha numérica de `Última actualización`;
 8. que esa fecha coincide con el día anterior en la zona horaria de Madrid.
+
+La fecha explícita del parte tiene prioridad. Cuando no existe, el descargador
+usa el día anterior a `Última actualización`, de acuerdo con la descripción
+oficial «día previo» del enlace. La comprobación contra la fecha esperada se
+mantiene, por lo que una copia antigua no puede archivarse como si fuera un
+parte nuevo.
 
 Si MITECO mantiene temporalmente el parte de un día anterior, el workflow falla
 de forma visible en lugar de archivar el documento con una fecha incorrecta.

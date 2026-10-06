@@ -1306,3 +1306,38 @@ dejar la documentación alineada con el código vigente.
 
 Revisar los cambios preparados, crear el commit de limpieza y, después,
 continuar con robustez de salidas LLM o evaluación sistemática del RAG.
+
+## 2026-10-07 — Recuperación del parte del 5 de octubre
+
+### Objetivo
+
+Adaptar la descarga automática a un cambio de formato de MITECO que había
+provocado el fallo de tres ejecuciones programadas.
+
+### Trabajo realizado
+
+- Se comprobó que el PDF publicado el 6 de octubre omitía la fecha larga del
+  parte y solo mostraba `Última actualización: ... 06/10/2026`.
+- `extract_report_date()` mantiene como primera opción la fecha explícita y,
+  cuando falta, infiere el día previo desde la fecha numérica de actualización.
+- Se conserva la comparación contra `expected_date`, por lo que un PDF antiguo
+  continúa siendo rechazado en lugar de guardarse con una fecha incorrecta.
+- Se añadieron pruebas para el formato alternativo, la prioridad del formato
+  original, la ausencia completa de fechas y el archivado inferido.
+- Se recuperó el documento todavía disponible y se archivó como
+  `ActuacionesMITECO-definitivo-2026-10-05.pdf`, con su entrada en el
+  manifiesto.
+
+### Validación
+
+- Las 15 pruebas del descargador y las 141 pruebas del proyecto finalizaron
+  correctamente.
+- Una segunda descarga devolvió `unchanged` y no duplicó el manifiesto.
+- El mismo PDF fue rechazado al intentar validarlo como parte del 6 de octubre.
+- El archivo recuperado conserva el SHA-256
+  `e10d7f3f0ac82befbb0100990e29728d6f53201d6e66f5a90b646e3f394e8f32`.
+
+### Siguiente paso
+
+Publicar la corrección para que las siguientes ejecuciones de GitHub Actions
+utilicen el nuevo fallback de fecha.

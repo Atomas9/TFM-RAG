@@ -151,7 +151,14 @@ def fetch_report(client: httpx.Client) -> tuple[ReportLink, bytes, str]:
 
 
 def extract_report_date(pdf_bytes: bytes) -> date:
-    """Abre el PDF y extrae la fecha del parte de su primera pagina."""
+    """Abre el PDF y extrae o infiere la fecha del parte.
+
+    MITECO suele escribir la fecha del parte con el formato ``24 de julio de
+    2026``. Algunos documentos omiten esa linea y solo conservan una fecha
+    numerica de ultima actualizacion. Como la pagina oficial identifica el PDF
+    como el parte del dia previo, en ese caso se utiliza el dia anterior a la
+    actualizacion.
+    """
 
     try:
         with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
@@ -181,20 +188,44 @@ def extract_report_date(pdf_bytes: bytes) -> date:
         r"\s+de\s+(\d{4})\b",
         normalized_text,
     )
-    if date_match is None:
+    if date_match is not None:
+        day, month_name, year = date_match.groups()
+        try:
+            return date(
+                year=int(year),
+                month=SPANISH_MONTHS[month_name],
+                day=int(day),
+            )
+        except ValueError as error:
+            raise DownloadError(
+                f"La fecha extraida del PDF no es valida: {error}"
+            ) from error
+
+    update_match = re.search(
+        r"ultima actualizacion:\s*"
+        r"(?:\d{1,2}:\d{2}(?::\d{2})?\s+)?"
+        r"del dia\s+(\d{1,2})/(\d{1,2})/(\d{4})\b",
+        normalized_text,
+    )
+    if update_match is None:
         raise DownloadError(
-            "No se pudo extraer la fecha del parte desde la primera pagina."
+            "No se pudo extraer la fecha del parte ni la fecha de su "
+            "ultima actualizacion desde la primera pagina."
         )
 
-    day, month_name, year = date_match.groups()
+    day, month, year = update_match.groups()
     try:
-        return date(
+        update_date = date(
             year=int(year),
-            month=SPANISH_MONTHS[month_name],
+            month=int(month),
             day=int(day),
         )
     except ValueError as error:
-        raise DownloadError(f"La fecha extraida del PDF no es valida: {error}") from error
+        raise DownloadError(
+            f"La fecha de actualizacion del PDF no es valida: {error}"
+        ) from error
+
+    return update_date - timedelta(days=1)
 
 
 def validate_pdf(pdf_bytes: bytes, content_type: str = "") -> date:
